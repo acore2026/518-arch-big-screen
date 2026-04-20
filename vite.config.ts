@@ -10,11 +10,11 @@ export default defineConfig({
   ],
   server: {
     host: '0.0.0.0',
-    port: 8084,
+    port: 7101,
     strictPort: true,
     proxy: {
       '/dashscope': {
-        target: 'https://coding.dashscope.aliyuncs.com',
+        target: 'https://dashscope.aliyuncs.com',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/dashscope/, ''),
       },

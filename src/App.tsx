@@ -24,7 +24,11 @@ const DEFAULT_INTENT_DATA = {
   guidelines: 'Criticality: High scalability; focus on fixed-location power efficiency',
 };
 
-const DISPLAY_MODEL_NAME = 'Gemini-2.5';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/dashscope/compatible-mode/v1/chat/completions';
+const MODEL_NAME = import.meta.env.VITE_MODEL_NAME || 'glm-5';
+const API_KEY = import.meta.env.VITE_API_KEY || '';
+const USE_REAL_LLM = String(import.meta.env.VITE_USE_REAL_LLM || '').toLowerCase() === 'true';
+const DISPLAY_MODEL_NAME = MODEL_NAME;
 const SESSION_STORAGE_KEY = 'agentic-core-session-history';
 
 const SUGGESTED_INTENTS = [
@@ -100,6 +104,44 @@ const DEFAULT_UE_DATA = {
     { id: 1, dnn: 'internet', sNssai: 'eMBB (SST:1)', ip: '10.0.0.12', qos: '5QI: 9' },
     { id: 2, dnn: 'urllc.agv', sNssai: 'URLLC (SST:2)', ip: '10.0.0.42', qos: '5QI: 82' },
   ],
+  policy: {
+    policyId: 'POL-URLLC-AGV-0027',
+    targetDnn: 'urllc.agv',
+    targetSlice: 'SST:2 / SD:0xA1B2C3',
+    qfi: 7,
+    qosId: 'QOS-URLLC-AGV-CONTROL-82',
+    '5qi': 82,
+    gbrDl: '40 Mbps',
+    gbrUl: '20 Mbps',
+    maxbrDl: '80 Mbps',
+    maxbrUl: '40 Mbps',
+    reflectiveQoS: 'Enabled',
+    arp: {
+      preemptCap: 'MAY_PREEMPT',
+      prioritLevel: 2,
+      preemptVuln: 'PREEMPTABLE',
+    },
+  },
+  metrics: {
+    windowLabel: 'Last 30 sec',
+    samples: [
+      { label: '-30s', dl: 22, ul: 7 },
+      { label: '-25s', dl: 28, ul: 9 },
+      { label: '-20s', dl: 34, ul: 11 },
+      { label: '-15s', dl: 46, ul: 15 },
+      { label: '-10s', dl: 58, ul: 18 },
+      { label: '-5s', dl: 52, ul: 16 },
+      { label: 'Now', dl: 49, ul: 14 },
+    ],
+    summary: {
+      avgDl: '41.3 Mbps',
+      peakDl: '58.0 Mbps',
+      avgUl: '12.9 Mbps',
+      rtt: '11.8 ms',
+      jitter: '2.4 ms',
+      packetLoss: '0.06%',
+    },
+  },
 };
 
 // --- Mock Tool Definitions ---
@@ -117,11 +159,244 @@ const TOOL_DEFINITIONS: Record<string, { desc: string; inputs: string[]; outputs
   "Analytic_Tool": { desc: "Provides Network Data Analytics, QoS prediction, and anomaly detection.", inputs: ["Target Area/UE", "Analytic ID", "Time Window"], outputs: ["Prediction Confidence", "Recommended Action"], host: "6G NWDAF", criticality: "Medium" }
 };
 
+const TRF_TOOL_GROUPS = [
+  { label: '6G AM Tools', tools: ['AUTH_Tool', 'SC_Tool', 'MM_Tool', 'Reachability_Tool'] },
+  { label: '6G SM Tools', tools: ['SMC_Tool', 'TR_Tool', 'UPC_Tool', 'VN_creation_tool', 'DNS_Resolver_Tool'] },
+  { label: '6G UDM Tools', tools: ['Subscription_Tool'] },
+  { label: '6G NWDAF Tools', tools: ['Analytic_Tool'] },
+];
+
 const safeRender = (val: any) => {
   if (val === null || val === undefined) return '';
   if (typeof val === 'object') return JSON.stringify(val);
   return String(val);
 };
+
+const UE_METRIC_LABELS = ['-30s', '-25s', '-20s', '-15s', '-10s', '-5s', 'Now'];
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatMbps(value: number) {
+  return `${value.toFixed(1)} Mbps`;
+}
+
+function formatMs(value: number) {
+  return `${value.toFixed(1)} ms`;
+}
+
+function formatPct(value: number) {
+  return `${value.toFixed(2)}%`;
+}
+
+function createMockUeData(supi = DEFAULT_UE_DATA.supi) {
+  return {
+    ...DEFAULT_UE_DATA,
+    supi,
+    location: { ...DEFAULT_UE_DATA.location },
+    sessions: DEFAULT_UE_DATA.sessions.map((session) => ({ ...session })),
+    policy: {
+      ...DEFAULT_UE_DATA.policy,
+      arp: { ...DEFAULT_UE_DATA.policy.arp },
+    },
+    metrics: {
+      ...DEFAULT_UE_DATA.metrics,
+      samples: DEFAULT_UE_DATA.metrics.samples.map((sample) => ({ ...sample })),
+      summary: { ...DEFAULT_UE_DATA.metrics.summary },
+    },
+  };
+}
+
+function advanceUeMetrics(metrics: any) {
+  const previousSamples = Array.isArray(metrics?.samples) ? metrics.samples : DEFAULT_UE_DATA.metrics.samples;
+  const lastSample = previousSamples[previousSamples.length - 1] || { dl: 49, ul: 14 };
+
+  const nextDl = clamp(lastSample.dl + (Math.random() * 10 - 5.2), 20, 64);
+  const nextUl = clamp(lastSample.ul + (Math.random() * 5 - 2.5), 6, 24);
+  const shiftedValues = [...previousSamples.slice(1).map((sample: any) => ({ dl: sample.dl, ul: sample.ul })), { dl: nextDl, ul: nextUl }];
+  const samples = UE_METRIC_LABELS.map((label, index) => ({
+    label,
+    dl: Number(shiftedValues[index].dl.toFixed(1)),
+    ul: Number(shiftedValues[index].ul.toFixed(1)),
+  }));
+
+  const avgDlValue = samples.reduce((sum, sample) => sum + sample.dl, 0) / samples.length;
+  const avgUlValue = samples.reduce((sum, sample) => sum + sample.ul, 0) / samples.length;
+  const peakDlValue = samples.reduce((max, sample) => Math.max(max, sample.dl), 0);
+  const currentLoadRatio = nextDl / 64;
+  const rttValue = clamp(9.5 + currentLoadRatio * 4.2 + Math.random() * 0.7, 8.5, 16.5);
+  const jitterValue = clamp(1.4 + currentLoadRatio * 1.6 + Math.random() * 0.4, 1.1, 4.2);
+  const packetLossValue = clamp(0.02 + currentLoadRatio * 0.08 + Math.random() * 0.02, 0.01, 0.18);
+
+  return {
+    ...metrics,
+    samples,
+    summary: {
+      avgDl: formatMbps(avgDlValue),
+      peakDl: formatMbps(peakDlValue),
+      avgUl: formatMbps(avgUlValue),
+      rtt: formatMs(rttValue),
+      jitter: formatMs(jitterValue),
+      packetLoss: formatPct(packetLossValue),
+    },
+  };
+}
+
+async function fetchWithRetry(url: string, options: RequestInit, retries = 3) {
+  const delays = [700, 1400, 2400];
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      const response = await fetch(url, options);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText.slice(0, 500)}`);
+      }
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown network error');
+      if (attempt === retries - 1) {
+        throw lastError;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+    }
+  }
+
+  throw lastError || new Error('Request failed');
+}
+
+function extractJsonPayload(rawContent: unknown) {
+  const content = Array.isArray(rawContent)
+    ? rawContent.map((item) => safeRender((item as any)?.text ?? item)).join('')
+    : safeRender(rawContent);
+  const cleaned = content.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start !== -1 && end > start) {
+      return JSON.parse(cleaned.slice(start, end + 1));
+    }
+    throw new Error('Model response did not contain valid JSON');
+  }
+}
+
+function normalizePlaybackData(rawData: any): PlaybackData {
+  const structuredIntent = rawData?.structured_intent && typeof rawData.structured_intent === 'object'
+    ? {
+        goals: safeRender(rawData.structured_intent.goals) || DEFAULT_INTENT_DATA.goals,
+        requirements: Array.isArray(rawData.structured_intent.requirements)
+          ? rawData.structured_intent.requirements.map((item: unknown) => safeRender(item)).filter(Boolean)
+          : [],
+        conditions: Array.isArray(rawData.structured_intent.conditions)
+          ? rawData.structured_intent.conditions.map((item: unknown) => safeRender(item)).filter(Boolean)
+          : [],
+        guidelines: safeRender(rawData.structured_intent.guidelines) || DEFAULT_INTENT_DATA.guidelines,
+      }
+    : DEFAULT_INTENT_DATA;
+
+  const agentLogs = Array.isArray(rawData?.agent_logs)
+    ? rawData.agent_logs
+        .map((entry: any) => ({
+          agent_name: safeRender(entry?.agent_name) || 'Unknown_Agent',
+          thoughts: Array.isArray(entry?.thoughts)
+            ? entry.thoughts.map((thought: unknown) => safeRender(thought)).filter(Boolean)
+            : [],
+        }))
+        .filter((entry: { agent_name: string; thoughts: string[] }) => entry.thoughts.length > 0)
+    : [];
+
+  const sbiTraces = Array.isArray(rawData?.sbi_traces)
+    ? rawData.sbi_traces
+        .map((trace: any) => ({
+          src_nf: safeRender(trace?.src_nf) || 'Planning_Agent',
+          dest_nf: safeRender(trace?.dest_nf) || 'TRF',
+          operation: safeRender(trace?.operation) || 'Unknown_Operation',
+          payload: trace?.payload ?? {},
+          status: safeRender(trace?.status) || 'Success',
+        }))
+        .filter((trace: { operation: string }) => Boolean(trace.operation))
+    : [];
+
+  return {
+    structured_intent: structuredIntent,
+    agent_logs: agentLogs,
+    sbi_traces: sbiTraces,
+  };
+}
+
+async function generatePlaybackData(intent: string): Promise<PlaybackData> {
+  if (!USE_REAL_LLM) {
+    return DEFAULT_PLAYBACK_DATA;
+  }
+
+  if (!API_KEY) {
+    throw new Error('VITE_USE_REAL_LLM is enabled, but VITE_API_KEY is missing.');
+  }
+
+  const systemPrompt = `You are the Planning Agent for a 6G agentic core dashboard.
+Return only valid JSON with this shape:
+{
+  "structured_intent": {
+    "goals": "string",
+    "requirements": ["string"],
+    "conditions": ["string"],
+    "guidelines": "string"
+  },
+  "agent_logs": [
+    {
+      "agent_name": "Planning_Agent",
+      "thoughts": ["string"]
+    }
+  ],
+  "sbi_traces": [
+    {
+      "src_nf": "Planning_Agent",
+      "dest_nf": "TRF",
+      "operation": "Ntrf_ToolDiscovery",
+      "payload": {"key": "value"},
+      "status": "Success"
+    }
+  ]
+}
+
+Rules:
+- Produce realistic orchestration for a 6G core network.
+- Use these NF names exactly when applicable: TRF, Planning_Agent, Conn_Agent, Compute_Agent, 6G AM, 6G SM, 6G UDM, 6G NWDAF.
+- The first trace should discover tools from TRF.
+- Include 2-4 agent_logs sections with concise reasoning.
+- Include 4-8 sbi_traces.
+- Payload can be an object.
+- Do not wrap the JSON in markdown fences.`;
+
+  const response = await fetchWithRetry(API_BASE_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: MODEL_NAME,
+      temperature: 0.2,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: intent },
+      ],
+    }),
+  });
+
+  const result = await response.json();
+  const content = result?.choices?.[0]?.message?.content;
+  if (!content) {
+    throw new Error('LLM response did not include message content.');
+  }
+
+  return normalizePlaybackData(extractJsonPayload(content));
+}
 
 function buildTraceTimeline(intentStr: string, parsedData: PlaybackData): TraceRow[] {
   const rows: TraceRow[] = [
@@ -191,7 +466,7 @@ export default function App() {
   const [slowMode, setSlowMode] = useState(true); 
   
   const [traceData, setTraceData] = useState<any[]>([]);
-  const [intentData, setIntentData] = useState<any>(DEFAULT_INTENT_DATA);
+  const [intentData, setIntentData] = useState<any>(null);
   const [agentLogs, setAgentLogs] = useState<any[]>([]); 
   const [activeNFs, setActiveNFs] = useState<Set<string>>(new Set(['Planning_Agent']));
   const [rightTab, setRightTab] = useState('intent');
@@ -201,6 +476,7 @@ export default function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [canvasOverlay, setCanvasOverlay] = useState<'trf' | 'arf' | null>(null);
   const playbackIdRef = useRef(0);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([
     'plmn',
@@ -215,7 +491,7 @@ export default function App() {
 
   const [ueQuery, setUeQuery] = useState('imsi-208930000000001');
   const [isFetchingUe, setIsFetchingUe] = useState(false);
-  const [ueData, setUeData] = useState<any>(DEFAULT_UE_DATA);
+  const [ueData, setUeData] = useState<any>(() => createMockUeData());
 
   const [isFetchingNgap, setIsFetchingNgap] = useState(false);
   const [ngapData] = useState<any[]>([
@@ -291,6 +567,20 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setUeData((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          metrics: advanceUeMetrics(prev.metrics),
+        };
+      });
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   function handleSuggest() {
     const nextIndex = (suggestIndex + 1) % SUGGESTED_INTENTS.length;
     setSuggestIndex(nextIndex);
@@ -338,7 +628,7 @@ export default function App() {
     setIsFetchingUe(true);
     setUeData(null);
     await new Promise(r => setTimeout(r, 800));
-    setUeData({ ...DEFAULT_UE_DATA, supi: ueQuery });
+    setUeData(createMockUeData(ueQuery));
     setIsFetchingUe(false);
   }
 
@@ -380,10 +670,43 @@ export default function App() {
   async function processIntent() {
     if (!inputText.trim() || isProcessing || isPlaying) return;
     setIsProcessing(true);
-    setLastPlaybackData(DEFAULT_PLAYBACK_DATA);
-    registerSessionRecord(inputText, DEFAULT_PLAYBACK_DATA);
-    setIsProcessing(false);
-    executePlayback(inputText, DEFAULT_PLAYBACK_DATA);
+    const currentIntent = inputText.trim();
+
+    try {
+      const playbackData = await generatePlaybackData(currentIntent);
+      setLastPlaybackData(playbackData);
+      registerSessionRecord(currentIntent, playbackData);
+      setIsProcessing(false);
+      executePlayback(currentIntent, playbackData);
+    } catch (error) {
+      console.error('Intent execution failed', error);
+      const message = error instanceof Error ? error.message : 'Unknown LLM execution error';
+      setTraceData([
+        {
+          id: `trace-error-${Date.now()}`,
+          time: '0ms',
+          src: 'Planning_Agent',
+          dest: 'LLM Gateway',
+          op: 'Npa_Intent_Failed',
+          payload: JSON.stringify({ error: message }),
+          status: '500 Error',
+        },
+      ]);
+      setIntentData(null);
+      setAgentLogs([
+        {
+          agent_name: 'System',
+          thoughts: [
+            USE_REAL_LLM
+              ? `Live ${MODEL_NAME} request failed: ${message}`
+              : `Stub playback failed: ${message}`,
+          ],
+        },
+      ]);
+      setActiveNFs(new Set());
+      setIsProcessing(false);
+      setRightTab('log');
+    }
   }
 
   return (
@@ -435,6 +758,70 @@ export default function App() {
                     {TOOL_DEFINITIONS[selectedTool]?.outputs?.map((out: any, i: number) => <li key={i}>{safeRender(out)}</li>)}
                   </ul>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canvasOverlay === 'trf' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/35 backdrop-blur-sm">
+          <div className="flex w-[620px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Library size={16} className="text-purple-600" />
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-700">TRF Tool Registry</h3>
+                  <p className="mt-0.5 text-[10px] text-slate-400">Available tools grouped by 6G network function host.</p>
+                </div>
+              </div>
+              <button onClick={() => setCanvasOverlay(null)} className="text-slate-400 transition-colors hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="grid gap-4 p-4 sm:grid-cols-2">
+              {TRF_TOOL_GROUPS.map((group) => (
+                <div key={group.label} className="rounded-xl border border-[#e1e8f2] bg-[#fbfcfe] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+                  <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{group.label}</div>
+                  <div className="flex flex-wrap gap-2">
+                    {group.tools.map((tool) => (
+                      <ToolBadge
+                        key={tool}
+                        label={tool}
+                        onClick={() => {
+                          setCanvasOverlay(null);
+                          setSelectedTool(tool);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {canvasOverlay === 'arf' && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/35 backdrop-blur-sm">
+          <div className="flex w-[520px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="flex items-center gap-2">
+                <Search size={16} className="text-purple-600" />
+                <div>
+                  <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-700">ARF Agent Registry</h3>
+                  <p className="mt-0.5 text-[10px] text-slate-400">Reserved for agent registry details and discovery content.</p>
+                </div>
+              </div>
+              <button onClick={() => setCanvasOverlay(null)} className="text-slate-400 transition-colors hover:text-slate-700">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex min-h-[180px] items-center justify-center p-6 text-center">
+              <div>
+                <Bot size={24} className="mx-auto text-slate-300" />
+                <div className="mt-3 text-[11px] font-medium text-slate-500">No ARF content configured yet.</div>
+                <div className="mt-1 text-[10px] text-slate-400">This window is ready for future agent registry information.</div>
               </div>
             </div>
           </div>
@@ -577,8 +964,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-4">
-                    <NFNode id="TRF" icon={<Library size={20}/>} label="TRF (Tools)" color="purple" size="small" active={activeNFs.has('TRF')} />
-                    <NFNode id="ARF" icon={<Search size={20}/>} label="ARF (Agents)" color="purple" size="small" active={activeNFs.has('ARF')} />
+                    <NFNode id="TRF" icon={<Library size={20}/>} label="TRF (Tools)" color="purple" size="small" active={activeNFs.has('TRF')} onClick={() => setCanvasOverlay('trf')} />
+                    <NFNode id="ARF" icon={<Search size={20}/>} label="ARF (Agents)" color="purple" size="small" active={activeNFs.has('ARF')} onClick={() => setCanvasOverlay('arf')} />
                   </div>
                 </div>
               </div>
@@ -797,6 +1184,67 @@ export default function App() {
                         ))}
                       </div>
                     </div>
+
+                    <div className="rounded-xl border border-[#e1e8f2] bg-white p-4 shadow-[0_4px_12px_rgba(148,163,184,0.12)]">
+                      <div className="mb-3 flex items-center gap-2 border-b border-[#edf2f7] pb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                        <SlidersHorizontal size={12}/> Current Policy
+                      </div>
+                      <div className="mb-3 rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Applied Policy</div>
+                            <div className="mt-1 font-mono text-[10px] font-semibold text-slate-700">{ueData.policy.policyId}</div>
+                          </div>
+                          <span className="rounded-md bg-[#d8f5e6] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#208c61] shadow-sm">Applied</span>
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <span className="rounded-md bg-[#eef3ff] px-2.5 py-1 font-mono text-[9px] font-semibold text-[#4f76da]">{ueData.policy.targetDnn}</span>
+                          <span className="rounded-md bg-[#f4ecff] px-2.5 py-1 font-mono text-[9px] font-semibold text-[#8b4fe0]">{ueData.policy.targetSlice}</span>
+                          <span className="rounded-md bg-[#ecfbf5] px-2.5 py-1 font-mono text-[9px] font-semibold text-[#1b9a6d]">QFI {ueData.policy.qfi}</span>
+                          <span className="rounded-md bg-[#fff4e6] px-2.5 py-1 font-mono text-[9px] font-semibold text-[#c67a1d]">5QI {ueData.policy['5qi']}</span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <PolicyField label="qosId" value={ueData.policy.qosId} />
+                        <PolicyField label="reflectiveQoS" value={ueData.policy.reflectiveQoS} />
+                        <PolicyField label="gbrDl" value={ueData.policy.gbrDl} />
+                        <PolicyField label="gbrUl" value={ueData.policy.gbrUl} />
+                        <PolicyField label="maxbrDl" value={ueData.policy.maxbrDl} />
+                        <PolicyField label="maxbrUl" value={ueData.policy.maxbrUl} />
+                      </div>
+                      <div className="mt-3 rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+                        <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">ARP</div>
+                        <div className="grid grid-cols-1 gap-2">
+                          <PolicyField label="preemptCap" value={ueData.policy.arp.preemptCap} />
+                          <PolicyField label="prioritLevel" value={ueData.policy.arp.prioritLevel} />
+                          <PolicyField label="preemptVuln" value={ueData.policy.arp.preemptVuln} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-[#e1e8f2] bg-white p-4 shadow-[0_4px_12px_rgba(148,163,184,0.12)]">
+                      <div className="mb-3 flex items-center justify-between border-b border-[#edf2f7] pb-3">
+                        <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                          <Activity size={12}/> Live Service Metrics
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1 rounded-md bg-[#ecfbf5] px-2 py-1 text-[9px] font-bold text-[#1b9a6d]">
+                            <span className="h-2 w-2 rounded-full bg-[#1b9a6d] animate-pulse"></span>
+                            LIVE
+                          </span>
+                          <span className="rounded-md bg-[#eef3ff] px-2 py-1 text-[9px] font-bold text-[#4f76da]">{ueData.metrics.windowLabel}</span>
+                        </div>
+                      </div>
+                      <MetricLineChart samples={ueData.metrics.samples} />
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <MetricStat label="Avg DL" value={ueData.metrics.summary.avgDl} accent="text-[#31a6f6]" />
+                        <MetricStat label="Peak DL" value={ueData.metrics.summary.peakDl} accent="text-[#4f76da]" />
+                        <MetricStat label="Avg UL" value={ueData.metrics.summary.avgUl} accent="text-[#ab5cf6]" />
+                        <MetricStat label="RTT" value={ueData.metrics.summary.rtt} accent="text-[#1b9a6d]" />
+                        <MetricStat label="Jitter" value={ueData.metrics.summary.jitter} accent="text-[#c67a1d]" />
+                        <MetricStat label="Pkt Loss" value={ueData.metrics.summary.packetLoss} accent="text-[#dc5c78]" />
+                      </div>
+                    </div>
                   </div>
                 ) : <div className="text-center py-10 text-slate-400 italic">Enter a UE identifier to lookup context.</div>}
               </div>
@@ -940,6 +1388,101 @@ function KpiBlock({ label, value, trend }: any) {
   );
 }
 
+function PolicyField({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+      <div className="mb-1 text-[9px] font-bold tracking-[0.04em] text-slate-400">{label}</div>
+      <div className="break-all font-mono text-[10px] font-semibold text-slate-700">{value}</div>
+    </div>
+  );
+}
+
+function MetricStat({ label, value, accent }: { label: string; value: string; accent: string }) {
+  return (
+    <div className="rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+      <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400">{label}</div>
+      <div className={`font-mono text-[10px] font-semibold ${accent}`}>{value}</div>
+    </div>
+  );
+}
+
+function MetricLineChart({ samples }: { samples: Array<{ label: string; dl: number; ul: number }> }) {
+  const width = 320;
+  const height = 132;
+  const paddingX = 14;
+  const paddingY = 14;
+  const maxValue = Math.max(...samples.flatMap((sample) => [sample.dl, sample.ul]), 1) * 1.15;
+  const innerWidth = width - paddingX * 2;
+  const innerHeight = height - paddingY * 2;
+
+  const toPoint = (value: number, index: number) => {
+    const x = paddingX + (index * innerWidth) / Math.max(samples.length - 1, 1);
+    const y = paddingY + innerHeight - (value / maxValue) * innerHeight;
+    return `${x},${y}`;
+  };
+
+  const dlLine = samples.map((sample, index) => toPoint(sample.dl, index)).join(' ');
+  const ulLine = samples.map((sample, index) => toPoint(sample.ul, index)).join(' ');
+  const gridValues = [0.25, 0.5, 0.75];
+
+  return (
+    <div className="rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+      <div className="mb-3 flex items-center gap-3 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400">
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#31a6f6]"></span>DL Bandwidth</span>
+        <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#ab5cf6]"></span>UL Bandwidth</span>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-36 w-full overflow-visible">
+        {gridValues.map((ratio, index) => {
+          const y = paddingY + innerHeight - innerHeight * ratio;
+          return (
+            <line
+              key={index}
+              x1={paddingX}
+              y1={y}
+              x2={width - paddingX}
+              y2={y}
+              stroke="#e2e8f0"
+              strokeDasharray="3 4"
+              strokeWidth="1"
+            />
+          );
+        })}
+        <polyline
+          fill="none"
+          stroke="#31a6f6"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          points={dlLine}
+        />
+        <polyline
+          fill="none"
+          stroke="#ab5cf6"
+          strokeWidth="3"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          points={ulLine}
+        />
+        {samples.map((sample, index) => {
+          const [dlx, dly] = toPoint(sample.dl, index).split(',').map(Number);
+          const [ulx, uly] = toPoint(sample.ul, index).split(',').map(Number);
+          return (
+            <g key={sample.label}>
+              <circle cx={dlx} cy={dly} r="3.5" fill="#31a6f6" />
+              <circle cx={ulx} cy={uly} r="3.5" fill="#ab5cf6" />
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-2 grid grid-cols-7 text-center text-[9px] font-mono text-slate-400">
+        {samples.map((sample) => (
+          <span key={sample.label}>{sample.label}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TabBtn({ active, icon, label, onClick }: any) {
   return (
     <button onClick={onClick} className={`flex-1 border-b px-1 py-2 transition-all ${active ? 'border-[#5f8cff] bg-white text-[#4f76da]' : 'border-transparent text-slate-400 hover:bg-white'}`}>
@@ -972,7 +1515,7 @@ function ToolBadge({ label, onClick }: any) {
   );
 }
 
-function NFNode({ icon, label, active, color = "blue", size = "normal" }: any) {
+function NFNode({ icon, label, active, color = "blue", size = "normal", onClick }: any) {
   const themes: any = {
     blue: "border-blue-200 bg-blue-50/50 text-blue-600",
     emerald: "border-emerald-200 bg-emerald-50/50 text-emerald-600",
@@ -986,13 +1529,27 @@ function NFNode({ icon, label, active, color = "blue", size = "normal" }: any) {
     slate: "border-slate-400 bg-slate-100"
   };
   const dimensions = size === 'small' ? 'h-10 w-10' : 'h-16 w-16';
+  const isClickable = typeof onClick === 'function';
   
   return (
-    <div className="flex flex-col items-center gap-1.5 group">
+    <div
+      className={`flex flex-col items-center gap-1.5 group ${isClickable ? 'cursor-pointer' : ''}`}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!isClickable) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onClick();
+        }
+      }}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+    >
       <div className={`
         ${dimensions} relative flex items-center justify-center rounded-lg border-2 transition-all duration-300
         ${active ? activeThemes[color] : themes[color]}
         ${active ? 'scale-105 shadow-[0_0_0_3px_rgba(191,219,254,0.45)]' : ''}
+        ${isClickable ? 'group-hover:scale-105 group-hover:shadow-[0_8px_20px_rgba(99,102,241,0.14)]' : ''}
       `}>
         {icon}
         {active && <div className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white bg-[#4f76da] animate-pulse"></div>}
