@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Activity, Server, Database, Network, Cpu, Wifi, 
   Play, CheckCircle, Clock, Search, 
@@ -41,7 +41,7 @@ const DEFAULT_PLAYBACK_DATA = {
   structured_intent: DEFAULT_INTENT_DATA,
   agent_logs: [
     {
-      agent_name: 'Planning_Agent',
+      agent_name: 'System_Agent',
       thoughts: [
         'Intent classified as massive IoT reachability tracking for fixed smart-meter devices.',
         'Required capabilities identified: subscription validation, AM reachability policy, and NWDAF optimization analytics.',
@@ -53,12 +53,12 @@ const DEFAULT_PLAYBACK_DATA = {
       thoughts: [
         'Resolved target hosts: 6G UDM for subscription context, 6G AM for reachability control, 6G NWDAF for predictive analytics.',
         'Applying fixed-device tracking profile with periodic monitoring and low-power reachability constraints.',
-        'All downstream SBI operations completed successfully; returning completion state to Planning_Agent.',
+        'All downstream SBI operations completed successfully; returning completion state to System_Agent.',
       ],
     },
   ],
   sbi_traces: [
-    { src_nf: 'Planning_Agent', dest_nf: 'TRF', operation: 'Ntrf_ToolDiscovery', payload: '{"service":"reachability_tracking","constraints":["massive_IoT","fixed_device"]}', status: 'Success' },
+    { src_nf: 'System_Agent', dest_nf: 'TRF', operation: 'Ntrf_ToolDiscovery', payload: '{"service":"reachability_tracking","constraints":["massive_IoT","fixed_device"]}', status: 'Success' },
     { src_nf: 'Conn_Agent', dest_nf: '6G UDM', operation: 'Subscription_Tool', payload: '{"query":"device_profile","type":"smart_meter","id_range":"IoT-block-104"}', status: 'Success' },
     { src_nf: 'Conn_Agent', dest_nf: '6G AM', operation: 'Reachability_Tool', payload: '{"action":"activate_tracking","mode":"periodic","ue_type":"fixed"}', status: 'Success' },
     { src_nf: 'Conn_Agent', dest_nf: '6G NWDAF', operation: 'Analytic_Tool', payload: '{"analytics_id":"reachability_optimization","target":"massive_IoT_group"}', status: 'Success' },
@@ -88,9 +88,65 @@ type SessionRecord = {
   data: PlaybackData;
   traceRows: TraceRow[];
   traceCount: number;
+  ueId: string | null;
+  ueLabel: string;
+  ueSupi: string;
 };
 
-const DEFAULT_UE_DATA = {
+type UeSnapshot = {
+  supi: string;
+  pei: string;
+  status: string;
+  rmStatus: string;
+  location: {
+    tai: string;
+    gNodeB: string;
+    cellId: string;
+  };
+  sessions: Array<{ id: number; dnn: string; sNssai: string; ip: string; qos: string }>;
+  policy: {
+    policyId: string;
+    targetDnn: string;
+    targetSlice: string;
+    qfi: number;
+    qosId: string;
+    '5qi': number;
+    gbrDl: string;
+    gbrUl: string;
+    maxbrDl: string;
+    maxbrUl: string;
+    reflectiveQoS: string;
+    arp: {
+      preemptCap: string;
+      prioritLevel: number;
+      preemptVuln: string;
+    };
+  };
+  metrics: {
+    windowLabel: string;
+    samples: Array<{ label: string; dl: number; ul: number }>;
+    summary: {
+      avgDl: string;
+      peakDl: string;
+      avgUl: string;
+      rtt: string;
+      jitter: string;
+      packetLoss: string;
+    };
+  };
+};
+
+type MockUeOption = {
+  id: string;
+  label: string;
+  profile: string;
+  summary: string;
+  data: UeSnapshot;
+};
+
+type SelectorPlacement = 'header' | 'sidebar' | 'intent';
+
+const DEFAULT_UE_DATA: UeSnapshot = {
   supi: 'imsi-208930000000001',
   pei: 'imeisv-35431108221433-12',
   status: 'CM-CONNECTED',
@@ -190,23 +246,149 @@ function formatPct(value: number) {
   return `${value.toFixed(2)}%`;
 }
 
-function createMockUeData(supi = DEFAULT_UE_DATA.supi) {
+function cloneUeData(data: UeSnapshot): UeSnapshot {
   return {
-    ...DEFAULT_UE_DATA,
-    supi,
-    location: { ...DEFAULT_UE_DATA.location },
-    sessions: DEFAULT_UE_DATA.sessions.map((session) => ({ ...session })),
+    ...data,
+    location: { ...data.location },
+    sessions: data.sessions.map((session) => ({ ...session })),
     policy: {
-      ...DEFAULT_UE_DATA.policy,
-      arp: { ...DEFAULT_UE_DATA.policy.arp },
+      ...data.policy,
+      arp: { ...data.policy.arp },
     },
     metrics: {
-      ...DEFAULT_UE_DATA.metrics,
-      samples: DEFAULT_UE_DATA.metrics.samples.map((sample) => ({ ...sample })),
-      summary: { ...DEFAULT_UE_DATA.metrics.summary },
+      ...data.metrics,
+      samples: data.metrics.samples.map((sample) => ({ ...sample })),
+      summary: { ...data.metrics.summary },
     },
   };
 }
+
+const MOCK_UES: MockUeOption[] = [
+  {
+    id: 'ar-gamer-01',
+    label: 'AR Gamer 01',
+    profile: 'AR-Gamer',
+    summary: 'Edge-rendered AR session with mobility-sensitive QoS.',
+    data: {
+      supi: 'imsi-208930000000011',
+      pei: 'imeisv-35399109011234-21',
+      status: 'CM-CONNECTED',
+      rmStatus: 'RM-REGISTERED',
+      location: {
+        tai: 'TAC: 0x0007, MCC: 208, MNC: 93',
+        gNodeB: 'gNB-ID: 10612',
+        cellId: 'NR-CGI: 208930001061201',
+      },
+      sessions: [
+        { id: 1, dnn: 'internet', sNssai: 'eMBB (SST:1)', ip: '10.10.0.19', qos: '5QI: 9' },
+        { id: 2, dnn: 'ar.edge', sNssai: 'XR (SST:4)', ip: '10.10.1.33', qos: '5QI: 7' },
+      ],
+      policy: {
+        policyId: 'POL-XR-EDGE-1108',
+        targetDnn: 'ar.edge',
+        targetSlice: 'SST:4 / SD:0xEA7101',
+        qfi: 11,
+        qosId: 'QOS-XR-EDGE-7',
+        '5qi': 7,
+        gbrDl: '120 Mbps',
+        gbrUl: '30 Mbps',
+        maxbrDl: '180 Mbps',
+        maxbrUl: '60 Mbps',
+        reflectiveQoS: 'Enabled',
+        arp: {
+          preemptCap: 'MAY_PREEMPT',
+          prioritLevel: 3,
+          preemptVuln: 'NOT_PREEMPTABLE',
+        },
+      },
+      metrics: {
+        windowLabel: 'Last 30 sec',
+        samples: [
+          { label: '-30s', dl: 74, ul: 18 },
+          { label: '-25s', dl: 82, ul: 20 },
+          { label: '-20s', dl: 91, ul: 24 },
+          { label: '-15s', dl: 88, ul: 21 },
+          { label: '-10s', dl: 97, ul: 25 },
+          { label: '-5s', dl: 103, ul: 27 },
+          { label: 'Now', dl: 95, ul: 24 },
+        ],
+        summary: {
+          avgDl: '90.0 Mbps',
+          peakDl: '103.0 Mbps',
+          avgUl: '22.7 Mbps',
+          rtt: '9.4 ms',
+          jitter: '1.9 ms',
+          packetLoss: '0.03%',
+        },
+      },
+    },
+  },
+  {
+    id: 'agv-swarm-01',
+    label: 'AGV Swarm 01',
+    profile: 'AGV-Swarm',
+    summary: 'Factory URLLC control plane for coordinated AGV movement.',
+    data: cloneUeData(DEFAULT_UE_DATA),
+  },
+  {
+    id: 'smart-meter-01',
+    label: 'Smart Meter 01',
+    profile: 'Smart-Meter',
+    summary: 'Massive IoT metering endpoint with low-power periodic reachability.',
+    data: {
+      supi: 'imsi-208930000000031',
+      pei: 'imeisv-86422107054119-05',
+      status: 'CM-IDLE',
+      rmStatus: 'RM-REGISTERED',
+      location: {
+        tai: 'TAC: 0x000C, MCC: 208, MNC: 93',
+        gNodeB: 'gNB-ID: 20512',
+        cellId: 'NR-CGI: 208930002051204',
+      },
+      sessions: [
+        { id: 1, dnn: 'iot.telemetry', sNssai: 'mMTC (SST:3)', ip: '10.20.4.88', qos: '5QI: 70' },
+      ],
+      policy: {
+        policyId: 'POL-MIOT-TRACK-7842',
+        targetDnn: 'iot.telemetry',
+        targetSlice: 'SST:3 / SD:0x00AA31',
+        qfi: 3,
+        qosId: 'QOS-MIOT-REACHABILITY-70',
+        '5qi': 70,
+        gbrDl: '256 Kbps',
+        gbrUl: '384 Kbps',
+        maxbrDl: '1 Mbps',
+        maxbrUl: '1 Mbps',
+        reflectiveQoS: 'Disabled',
+        arp: {
+          preemptCap: 'NOT_PREEMPT',
+          prioritLevel: 8,
+          preemptVuln: 'PREEMPTABLE',
+        },
+      },
+      metrics: {
+        windowLabel: 'Last 30 sec',
+        samples: [
+          { label: '-30s', dl: 1.1, ul: 0.4 },
+          { label: '-25s', dl: 1.4, ul: 0.5 },
+          { label: '-20s', dl: 1.8, ul: 0.6 },
+          { label: '-15s', dl: 1.2, ul: 0.5 },
+          { label: '-10s', dl: 2.0, ul: 0.8 },
+          { label: '-5s', dl: 1.6, ul: 0.6 },
+          { label: 'Now', dl: 1.3, ul: 0.5 },
+        ],
+        summary: {
+          avgDl: '1.5 Mbps',
+          peakDl: '2.0 Mbps',
+          avgUl: '0.6 Mbps',
+          rtt: '46.0 ms',
+          jitter: '6.1 ms',
+          packetLoss: '0.12%',
+        },
+      },
+    },
+  },
+];
 
 function advanceUeMetrics(metrics: any) {
   const previousSamples = Array.isArray(metrics?.samples) ? metrics.samples : DEFAULT_UE_DATA.metrics.samples;
@@ -313,7 +495,7 @@ function normalizePlaybackData(rawData: any): PlaybackData {
   const sbiTraces = Array.isArray(rawData?.sbi_traces)
     ? rawData.sbi_traces
         .map((trace: any) => ({
-          src_nf: safeRender(trace?.src_nf) || 'Planning_Agent',
+          src_nf: safeRender(trace?.src_nf) || 'System_Agent',
           dest_nf: safeRender(trace?.dest_nf) || 'TRF',
           operation: safeRender(trace?.operation) || 'Unknown_Operation',
           payload: trace?.payload ?? {},
@@ -329,7 +511,7 @@ function normalizePlaybackData(rawData: any): PlaybackData {
   };
 }
 
-async function generatePlaybackData(intent: string): Promise<PlaybackData> {
+async function generatePlaybackData(intent: string, targetUe: MockUeOption | null): Promise<PlaybackData> {
   if (!USE_REAL_LLM) {
     return DEFAULT_PLAYBACK_DATA;
   }
@@ -338,7 +520,7 @@ async function generatePlaybackData(intent: string): Promise<PlaybackData> {
     throw new Error('VITE_USE_REAL_LLM is enabled, but VITE_API_KEY is missing.');
   }
 
-  const systemPrompt = `You are the Planning Agent for a 6G agentic core dashboard.
+  const systemPrompt = `You are the System Agent for a 6G agentic core dashboard.
 Return only valid JSON with this shape:
 {
   "structured_intent": {
@@ -349,13 +531,13 @@ Return only valid JSON with this shape:
   },
   "agent_logs": [
     {
-      "agent_name": "Planning_Agent",
+      "agent_name": "System_Agent",
       "thoughts": ["string"]
     }
   ],
   "sbi_traces": [
     {
-      "src_nf": "Planning_Agent",
+      "src_nf": "System_Agent",
       "dest_nf": "TRF",
       "operation": "Ntrf_ToolDiscovery",
       "payload": {"key": "value"},
@@ -366,11 +548,12 @@ Return only valid JSON with this shape:
 
 Rules:
 - Produce realistic orchestration for a 6G core network.
-- Use these NF names exactly when applicable: TRF, Planning_Agent, Conn_Agent, Compute_Agent, 6G AM, 6G SM, 6G UDM, 6G NWDAF.
+- Use these NF names exactly when applicable: TRF, System_Agent, Conn_Agent, Compute_Agent, 6G AM, 6G SM, 6G UDM, 6G NWDAF.
 - The first trace should discover tools from TRF.
 - Include 2-4 agent_logs sections with concise reasoning.
 - Include 4-8 sbi_traces.
 - Payload can be an object.
+- Use the target UE context when choosing policy, reachability, mobility, and slice-related actions.
 - Do not wrap the JSON in markdown fences.`;
 
   const response = await fetchWithRetry(API_BASE_URL, {
@@ -384,7 +567,29 @@ Rules:
       temperature: 0.2,
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: intent },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            intent,
+            target_ue: targetUe
+              ? {
+                  label: targetUe.label,
+                  profile: targetUe.profile,
+                  supi: targetUe.data.supi,
+                  status: targetUe.data.status,
+                  rm_status: targetUe.data.rmStatus,
+                  sessions: targetUe.data.sessions,
+                  policy: {
+                    policyId: targetUe.data.policy.policyId,
+                    targetDnn: targetUe.data.policy.targetDnn,
+                    targetSlice: targetUe.data.policy.targetSlice,
+                    qfi: targetUe.data.policy.qfi,
+                    '5qi': targetUe.data.policy['5qi'],
+                  },
+                }
+              : null,
+          }),
+        },
       ],
     }),
   });
@@ -398,7 +603,7 @@ Rules:
   return normalizePlaybackData(extractJsonPayload(content));
 }
 
-function buildTraceTimeline(intentStr: string, parsedData: PlaybackData): TraceRow[] {
+function buildTraceTimeline(intentStr: string, parsedData: PlaybackData, targetUe: MockUeOption | null): TraceRow[] {
   const rows: TraceRow[] = [
     {
       id: `trace-${Date.now()}-0`,
@@ -406,16 +611,24 @@ function buildTraceTimeline(intentStr: string, parsedData: PlaybackData): TraceR
       src: 'UERANSIM_APP',
       dest: 'SRF',
       op: 'Nsrf_Intent_Submit',
-      payload: '{"request":"Raw Intent String"}',
+      payload: JSON.stringify({
+        request: 'Raw Intent String',
+        ue: targetUe?.data.supi || 'unassigned',
+        profile: targetUe?.profile || 'unknown',
+      }),
       status: '201 Created',
     },
     {
       id: `trace-${Date.now()}-1`,
       time: '0ms',
       src: 'SRF',
-      dest: 'Planning_Agent',
+      dest: 'System_Agent',
       op: 'Npa_Task_Create',
-      payload: JSON.stringify({ intent: intentStr }),
+      payload: JSON.stringify({
+        intent: intentStr,
+        ue_label: targetUe?.label || 'Unassigned UE',
+        ue_supi: targetUe?.data.supi || 'unassigned',
+      }),
       status: '200 OK',
     },
   ];
@@ -438,7 +651,7 @@ function buildTraceTimeline(intentStr: string, parsedData: PlaybackData): TraceR
   rows.push({
     id: `trace-${Date.now()}-${rows.length}`,
     time: '0ms',
-    src: 'Planning_Agent',
+    src: 'System_Agent',
     dest: 'UERANSIM_APP',
     op: 'Npa_Task_Complete',
     payload: '{"result":"Service Provisioned","closed_loop_active":true}',
@@ -448,14 +661,17 @@ function buildTraceTimeline(intentStr: string, parsedData: PlaybackData): TraceR
   return rows;
 }
 
-function createSessionRecord(intent: string, data: PlaybackData): SessionRecord {
+function createSessionRecord(intent: string, data: PlaybackData, targetUe: MockUeOption | null): SessionRecord {
   return {
     id: `service-${Math.random().toString(36).slice(2, 8)}-${Math.random().toString(36).slice(2, 6)}`,
     createdAt: new Date().toLocaleString(),
     intent,
     data,
-    traceRows: buildTraceTimeline(intent, data),
+    traceRows: buildTraceTimeline(intent, data, targetUe),
     traceCount: Array.isArray(data.sbi_traces) ? data.sbi_traces.length : 0,
+    ueId: targetUe?.id || null,
+    ueLabel: targetUe?.label || 'Unassigned UE',
+    ueSupi: targetUe?.data.supi || 'unassigned',
   };
 }
 
@@ -468,12 +684,40 @@ export default function App() {
   const [traceData, setTraceData] = useState<any[]>([]);
   const [intentData, setIntentData] = useState<any>(null);
   const [agentLogs, setAgentLogs] = useState<any[]>([]); 
-  const [activeNFs, setActiveNFs] = useState<Set<string>>(new Set(['Planning_Agent']));
+  const [activeNFs, setActiveNFs] = useState<Set<string>>(new Set(['System_Agent']));
   const [rightTab, setRightTab] = useState('intent');
   const [suggestIndex, setSuggestIndex] = useState(0);
   const [lastPlaybackData, setLastPlaybackData] = useState<PlaybackData>(DEFAULT_PLAYBACK_DATA);
-  const [sessionHistory, setSessionHistory] = useState<SessionRecord[]>([]);
+  const [sessionHistory, setSessionHistory] = useState<SessionRecord[]>(() => {
+    try {
+      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((session: any) => ({
+        ...session,
+        traceRows: Array.isArray(session.traceRows)
+          ? session.traceRows
+          : buildTraceTimeline(
+              session.intent || DEFAULT_INTENT_TEXT,
+              session.data || DEFAULT_PLAYBACK_DATA,
+              MOCK_UES.find((ue) => ue.id === session.ueId) || null,
+            ),
+        traceCount: typeof session.traceCount === 'number'
+          ? session.traceCount
+          : Array.isArray(session.data?.sbi_traces) ? session.data.sbi_traces.length : 0,
+        ueId: typeof session.ueId === 'string' ? session.ueId : null,
+        ueLabel: safeRender(session.ueLabel) || 'Unassigned UE',
+        ueSupi: safeRender(session.ueSupi) || 'unassigned',
+      }));
+    } catch (error) {
+      console.error('Failed to restore session history', error);
+      return [];
+    }
+  });
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [selectorPlacement, setSelectorPlacement] = useState<SelectorPlacement>('intent');
+  const [selectedUeId, setSelectedUeId] = useState<string>(MOCK_UES[0].id);
   
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [canvasOverlay, setCanvasOverlay] = useState<'trf' | 'arf' | null>(null);
@@ -488,10 +732,7 @@ export default function App() {
     'udm_t',
     'nwdaf_t',
   ]));
-
-  const [ueQuery, setUeQuery] = useState('imsi-208930000000001');
-  const [isFetchingUe, setIsFetchingUe] = useState(false);
-  const [ueData, setUeData] = useState<any>(() => createMockUeData());
+  const [ueData, setUeData] = useState<UeSnapshot | null>(() => cloneUeData(MOCK_UES[0].data));
 
   const [isFetchingNgap, setIsFetchingNgap] = useState(false);
   const [ngapData] = useState<any[]>([
@@ -502,7 +743,7 @@ export default function App() {
 
   const [activeLogProcess, setActiveLogProcess] = useState<string | null>(null);
   const [processLogs] = useState<Record<string, string[]>>({
-    'planning-agent': ['[SYSTEM] Agent initialized. Ready to receive routing intents.'],
+    'system-agent': ['[SYSTEM] Agent initialized. Ready to receive routing intents.'],
     'conn-agent': ['[SYSTEM] Conn_Agent initialized.', '[DEBUG] Connected to TRF local cache.'],
     'free5gc-amf': ['[INFO] AMF: NGAP Setup Response sent to gNB-10449'],
     'free5gc-smf': ['[INFO] SMF: PFCP Association established with UPF'],
@@ -513,7 +754,7 @@ export default function App() {
   });
   
   const [infraData, setInfraData] = useState<any[]>([
-    { group: 'AI Control Layer', name: 'planning-agent', status: 'Running', cpu: 12.4, mem: 450, uptime: '14d 2h' },
+    { group: 'AI Control Layer', name: 'system-agent', status: 'Running', cpu: 12.4, mem: 450, uptime: '14d 2h' },
     { group: 'AI Control Layer', name: 'conn-agent', status: 'Running', cpu: 8.1, mem: 312, uptime: '14d 2h' },
     { group: 'free5GC NFs', name: 'free5gc-amf', status: 'Running', cpu: 4.2, mem: 128, uptime: '45d 12h' },
     { group: 'free5GC NFs', name: 'free5gc-smf', status: 'Running', cpu: 5.6, mem: 145, uptime: '45d 12h' },
@@ -525,27 +766,7 @@ export default function App() {
   ]);
 
   const [kpis, setKpis] = useState({ pdu: 7, cpLoad: 56, latency: 34.9 });
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        setSessionHistory(parsed.map((session: any) => ({
-          ...session,
-          traceRows: Array.isArray(session.traceRows)
-            ? session.traceRows
-            : buildTraceTimeline(session.intent || DEFAULT_INTENT_TEXT, session.data || DEFAULT_PLAYBACK_DATA),
-          traceCount: typeof session.traceCount === 'number'
-            ? session.traceCount
-            : Array.isArray(session.data?.sbi_traces) ? session.data.sbi_traces.length : 0,
-        })));
-      }
-    } catch (error) {
-      console.error('Failed to restore session history', error);
-    }
-  }, []);
+  const selectedUe = MOCK_UES.find((ue) => ue.id === selectedUeId) || null;
 
   useEffect(() => {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionHistory));
@@ -595,11 +816,27 @@ export default function App() {
     executePlayback(replayIntent, replayData);
   }
 
+  function handleSelectUe(ueId: string) {
+    const nextUe = MOCK_UES.find((ue) => ue.id === ueId) || null;
+    setSelectedUeId(ueId);
+    setUeData(nextUe ? cloneUeData(nextUe.data) : null);
+    setSelectedSessionId(null);
+  }
+
   function loadSessionIntoDashboard(session: SessionRecord) {
     const traceRows = Array.isArray(session.traceRows)
       ? session.traceRows
-      : buildTraceTimeline(session.intent, session.data || DEFAULT_PLAYBACK_DATA);
+      : buildTraceTimeline(
+          session.intent,
+          session.data || DEFAULT_PLAYBACK_DATA,
+          MOCK_UES.find((ue) => ue.id === session.ueId) || null,
+        );
     setSelectedSessionId(session.id);
+    if (session.ueId && MOCK_UES.some((ue) => ue.id === session.ueId)) {
+      setSelectedUeId(session.ueId);
+      const sessionUe = MOCK_UES.find((ue) => ue.id === session.ueId) || null;
+      setUeData(sessionUe ? cloneUeData(sessionUe.data) : null);
+    }
     setInputText(session.intent);
     setLastPlaybackData(session.data);
     setIntentData(session.data.structured_intent || null);
@@ -608,8 +845,8 @@ export default function App() {
     setActiveNFs(new Set());
   }
 
-  function registerSessionRecord(intent: string, data: PlaybackData) {
-    const record = createSessionRecord(intent, data);
+  function registerSessionRecord(intent: string, data: PlaybackData, targetUe: MockUeOption | null) {
+    const record = createSessionRecord(intent, data, targetUe);
     setSessionHistory(prev => [record, ...prev]);
     loadSessionIntoDashboard(record);
   }
@@ -622,33 +859,23 @@ export default function App() {
     });
   }
 
-  async function handleUeSearch(e: React.FormEvent) {
-    e.preventDefault();
-    if (!ueQuery.trim() || isFetchingUe) return;
-    setIsFetchingUe(true);
-    setUeData(null);
-    await new Promise(r => setTimeout(r, 800));
-    setUeData(createMockUeData(ueQuery));
-    setIsFetchingUe(false);
-  }
-
   async function handleNgapRefresh() {
     setIsFetchingNgap(true);
     await new Promise(r => setTimeout(r, 600));
     setIsFetchingNgap(false);
   }
 
-  async function executePlayback(intentStr: string, parsedData: any) {
+  async function executePlayback(intentStr: string, parsedData: any, targetUe: MockUeOption | null = selectedUe) {
     const currentId = Date.now();
     playbackIdRef.current = currentId;
     const checkAbort = () => playbackIdRef.current !== currentId;
-    const timeline = buildTraceTimeline(intentStr, parsedData);
+    const timeline = buildTraceTimeline(intentStr, parsedData, targetUe);
 
     setIsPlaying(true);
     setTraceData([]);
     setIntentData(null);
     setAgentLogs([]);
-    setActiveNFs(new Set(['Planning_Agent']));
+    setActiveNFs(new Set(['System_Agent']));
 
     const delayMult = slowMode ? 1.5 : 0.5;
     const sleep = (ms: number) => new Promise(r => setTimeout(r, ms * delayMult));
@@ -668,16 +895,16 @@ export default function App() {
   }
 
   async function processIntent() {
-    if (!inputText.trim() || isProcessing || isPlaying) return;
+    if (!inputText.trim() || isProcessing || isPlaying || !selectedUe) return;
     setIsProcessing(true);
     const currentIntent = inputText.trim();
 
     try {
-      const playbackData = await generatePlaybackData(currentIntent);
+      const playbackData = await generatePlaybackData(currentIntent, selectedUe);
       setLastPlaybackData(playbackData);
-      registerSessionRecord(currentIntent, playbackData);
+      registerSessionRecord(currentIntent, playbackData, selectedUe);
       setIsProcessing(false);
-      executePlayback(currentIntent, playbackData);
+      executePlayback(currentIntent, playbackData, selectedUe);
     } catch (error) {
       console.error('Intent execution failed', error);
       const message = error instanceof Error ? error.message : 'Unknown LLM execution error';
@@ -685,7 +912,7 @@ export default function App() {
         {
           id: `trace-error-${Date.now()}`,
           time: '0ms',
-          src: 'Planning_Agent',
+          src: 'System_Agent',
           dest: 'LLM Gateway',
           op: 'Npa_Intent_Failed',
           payload: JSON.stringify({ error: message }),
@@ -844,6 +1071,29 @@ export default function App() {
             <KpiBlock label="AGENTIC CP LOAD" value={`${kpis.cpLoad}%`} trend="up" />
             <KpiBlock label="AVG SBI LATENCY" value={`${kpis.latency.toFixed(1)}ms`} trend="down" />
           </div>
+          <div className="flex items-center gap-3 rounded-lg border border-slate-700/90 bg-slate-900/25 px-3 py-1.5">
+            <div>
+              <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-500">UE Selector</div>
+              <div className="mt-1 flex gap-1">
+                {(['header', 'sidebar', 'intent'] as SelectorPlacement[]).map((placement) => (
+                  <button
+                    key={placement}
+                    onClick={() => setSelectorPlacement(placement)}
+                    className={`rounded px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] transition-colors ${
+                      selectorPlacement === placement
+                        ? 'bg-[#2f67f6] text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
+                    }`}
+                  >
+                    {placement}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          {selectorPlacement === 'header' && (
+            <HeaderUeSelector selectedUe={selectedUe} options={MOCK_UES} onSelect={handleSelectUe} />
+          )}
           <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
             <Clock size={14} /> <span>11:47:27 UTC</span>
           </div>
@@ -869,7 +1119,7 @@ export default function App() {
                     {expandedFolders.has('ai_layer') && (
                       <div className="ml-4 space-y-0.5 text-slate-400">
                         <TreeItem id="m1" label={`Model: ${DISPLAY_MODEL_NAME}`} icon={<Microchip size={10}/>} />
-                        <TreeItem id="pa" label="Inst: Planning_Agent" icon={<Bot size={10}/>} />
+                        <TreeItem id="pa" label="Inst: System_Agent" icon={<Bot size={10}/>} />
                         <TreeItem id="ca" label="Inst: Conn_Agent" icon={<Bot size={10}/>} />
                         <TreeItem id="cl" label="ARF / TRF Cluster" icon={<Library size={10}/>} />
                       </div>
@@ -887,10 +1137,23 @@ export default function App() {
                 )}
                 <TreeItem id="ran" label="UERANSIM" icon={<Wifi size={12}/>} hasChildren isExpanded={expandedFolders.has('ran')} onToggle={toggleFolder} />
                 {expandedFolders.has('ran') && (
-                  <div className="ml-4 space-y-0.5 text-slate-400">
+                  <div className="ml-4 space-y-2 text-slate-400">
+                    <div className="space-y-0.5">
                     <TreeItem id="p1" label="Profile: AR-Gamer" icon={<Smartphone size={10}/>} />
                     <TreeItem id="p2" label="Profile: AGV-Swarm" icon={<Smartphone size={10}/>} />
                     <TreeItem id="p3" label="Profile: Smart-Meter" icon={<Smartphone size={10}/>} />
+                    </div>
+                    {selectorPlacement === 'sidebar' && (
+                      <div className="rounded-lg border border-[#dbe3ef] bg-white/80 p-2 shadow-[0_1px_3px_rgba(148,163,184,0.12)]">
+                        <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">UE Targets</div>
+                        <UeSelectionList
+                          options={MOCK_UES}
+                          selectedUeId={selectedUeId}
+                          onSelect={handleSelectUe}
+                          variant="sidebar"
+                        />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -957,7 +1220,7 @@ export default function App() {
                 <div className="flex items-center gap-8 rounded-xl border border-dashed border-[#b9d2fb] bg-[#f7fbff] p-6">
                   <NFNode id="SRF" icon={<SlidersHorizontal/>} label="SRF Router" size="small" active={activeNFs.has('SRF')} />
                   <div className="flex flex-col items-center gap-6">
-                    <NFNode id="Planning_Agent" icon={<BrainCircuit size={28}/>} label="Planning Agent" color="emerald" active={activeNFs.has('Planning_Agent')} />
+                    <NFNode id="System_Agent" icon={<BrainCircuit size={28}/>} label="System Agent" color="emerald" active={activeNFs.has('System_Agent')} />
                     <div className="flex gap-4">
                       <NFNode id="Conn_Agent" icon={<Network/>} label="Conn Agent" color="blue" size="small" active={activeNFs.has('Conn_Agent')} />
                       <NFNode id="Compute_Agent" icon={<Cpu/>} label="Compute Agent" color="blue" size="small" active={activeNFs.has('Compute_Agent')} />
@@ -1046,16 +1309,48 @@ export default function App() {
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {rightTab === 'intent' && (
               <>
+                {selectorPlacement === 'intent' && (
+                  <div className="overflow-hidden rounded-lg border border-[#dbe3ef] bg-white">
+                    <div className="border-b border-[#dbe3ef] bg-[#eef3f9] px-3 py-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Target UE</span>
+                    </div>
+                    <div className="p-3">
+                      <UeSelectionList
+                        options={MOCK_UES}
+                        selectedUeId={selectedUeId}
+                        onSelect={handleSelectUe}
+                        variant="intent"
+                      />
+                    </div>
+                  </div>
+                )}
                 <div>
                    <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Natural Language Request</h3>
+                   <div className="mb-2 rounded-lg border border-[#dbe3ef] bg-[#f8fafc] px-3 py-2">
+                     <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Active Target UE</div>
+                     {selectedUe ? (
+                       <div className="mt-1 flex items-center justify-between gap-2">
+                         <div>
+                           <div className="text-[10px] font-semibold text-slate-700">{selectedUe.label}</div>
+                           <div className="font-mono text-[10px] text-slate-400">{selectedUe.data.supi}</div>
+                         </div>
+                         <span className="rounded-full bg-[#eef3ff] px-2 py-1 text-[9px] font-bold text-[#4f76da]">{selectedUe.profile}</span>
+                       </div>
+                     ) : (
+                       <div className="mt-1 text-[10px] text-slate-400">Choose a UE target before executing an intent.</div>
+                     )}
+                   </div>
                    <textarea 
                      className="h-20 w-full resize-none rounded border border-[#d7dfeb] bg-[#f8fafc] p-3 font-mono text-[10px] leading-4 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
                      value={inputText} onChange={(e) => setInputText(e.target.value)}
                      placeholder="Type intent here..."
                    />
+                   {!selectedUe && (
+                     <div className="mt-2 text-[10px] font-medium text-amber-600">Select a UE target first to enable execution.</div>
+                   )}
                    <div className="mt-2 flex gap-2">
                      <button onClick={handleSuggest} className="flex-1 rounded border border-[#d6deea] bg-white py-1.5 font-bold text-slate-600 hover:bg-slate-50">SUGGEST</button>
-                     <button onClick={processIntent} disabled={isProcessing} className="flex-[2] rounded bg-[#2f67f6] py-1.5 font-bold text-white shadow-sm transition-all hover:bg-[#2558db] active:scale-95 flex items-center justify-center gap-2">
+                     <button onClick={processIntent} disabled={isProcessing || !selectedUe} className="flex-[2] rounded bg-[#2f67f6] py-1.5 font-bold text-white shadow-sm transition-all hover:bg-[#2558db] active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:bg-[#a5b8e6]">
                         {isProcessing ? <Loader2 size={14} className="animate-spin"/> : <Play size={12} fill="currentColor"/>} EXECUTE
                      </button>
                      <button onClick={handleReplay} disabled={isProcessing || isPlaying} className="rounded bg-[#9b34f3] px-3 text-white hover:bg-[#8522db] shadow-sm flex items-center gap-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={12}/> REPLAY</button>
@@ -1123,14 +1418,24 @@ export default function App() {
 
             {rightTab === 'ue' && (
               <div className="space-y-4">
-                <div>
-                  <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Lookup UE Context</h3>
-                  <form onSubmit={handleUeSearch} className="flex gap-2">
-                    <input className="flex-1 rounded-md border border-[#d7dfeb] bg-white px-3 py-2.5 font-mono text-[10px] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] focus:outline-none focus:ring-1 focus:ring-[#8e63ff]" value={ueQuery} onChange={e => setUeQuery(e.target.value)} placeholder="imsi-208930000000001"/>
-                    <button className="flex items-center gap-2 rounded-md bg-[#933cf0] px-4 py-2.5 text-[10px] font-bold text-white shadow-sm hover:bg-[#7f2cda]">
-                      {isFetchingUe ? <Loader2 size={14} className="animate-spin"/> : <Search size={14}/>} FETCH
-                    </button>
-                  </form>
+                <div className="rounded-xl border border-[#e1e8f2] bg-white p-4 shadow-[0_4px_12px_rgba(148,163,184,0.12)]">
+                  <div className="mb-3 flex items-center gap-2 border-b border-[#edf2f7] pb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">
+                    <Smartphone size={12}/> Active UE
+                  </div>
+                  {selectedUe ? (
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-semibold text-slate-700">{selectedUe.label}</div>
+                        <div className="mt-1 font-mono text-[10px] text-slate-500">{selectedUe.data.supi}</div>
+                        <div className="mt-2 text-[10px] text-slate-400">{selectedUe.summary}</div>
+                      </div>
+                      <span className="rounded-md bg-[#eef3ff] px-2.5 py-1 text-[9px] font-bold uppercase tracking-[0.08em] text-[#4f76da]">
+                        {selectedUe.profile}
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="text-[10px] text-slate-400">No UE target selected.</div>
+                  )}
                 </div>
                 {ueData ? (
                   <div className="space-y-4">
@@ -1246,7 +1551,7 @@ export default function App() {
                       </div>
                     </div>
                   </div>
-                ) : <div className="text-center py-10 text-slate-400 italic">Enter a UE identifier to lookup context.</div>}
+                ) : <div className="text-center py-10 text-slate-400 italic">Select a UE target to inspect state.</div>}
               </div>
             )}
 
@@ -1359,6 +1664,10 @@ export default function App() {
                           </div>
                           <span className="rounded-full bg-[#eef3f9] px-2 py-1 font-mono text-[9px] font-bold text-slate-500">{session.traceCount}</span>
                         </div>
+                        <div className="mt-2 flex items-center justify-between gap-2">
+                          <span className="rounded-full bg-[#eef3ff] px-2 py-1 text-[9px] font-bold text-[#4f76da]">{session.ueLabel}</span>
+                          <span className="font-mono text-[9px] text-slate-400">{session.ueSupi}</span>
+                        </div>
                         <div className="mt-2 line-clamp-2 text-[10px] leading-4 text-slate-600">{session.intent}</div>
                       </button>
                     ))}
@@ -1371,6 +1680,84 @@ export default function App() {
 
       </div>
       </div>
+    </div>
+  );
+}
+
+function HeaderUeSelector({
+  selectedUe,
+  options,
+  onSelect,
+}: {
+  selectedUe: MockUeOption | null;
+  options: MockUeOption[];
+  onSelect: (ueId: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-slate-700/90 bg-slate-900/25 px-3 py-1.5">
+      <div>
+        <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-500">Active UE</div>
+        <div className="text-[10px] font-semibold text-white">{selectedUe?.label || 'Unassigned'}</div>
+      </div>
+      <select
+        value={selectedUe?.id || ''}
+        onChange={(event) => onSelect(event.target.value)}
+        className="rounded border border-slate-600 bg-[#10182c] px-2 py-1 text-[10px] font-medium text-slate-200 focus:outline-none"
+      >
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label} · {option.data.supi}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function UeSelectionList({
+  options,
+  selectedUeId,
+  onSelect,
+  variant = 'intent',
+}: {
+  options: MockUeOption[];
+  selectedUeId: string | null;
+  onSelect: (ueId: string) => void;
+  variant?: 'intent' | 'sidebar';
+}) {
+  const gapClass = variant === 'sidebar' ? 'space-y-1.5' : 'space-y-2';
+
+  return (
+    <div className={gapClass}>
+      {options.map((option) => {
+        const active = selectedUeId === option.id;
+        return (
+          <button
+            key={option.id}
+            onClick={() => onSelect(option.id)}
+            className={`w-full rounded-lg border px-3 py-2 text-left transition-all ${
+              active
+                ? 'border-[#8fb2ff] bg-[#f4f8ff] shadow-[0_4px_12px_rgba(95,140,255,0.12)]'
+                : 'border-[#e1e8f2] bg-[#fbfcfe] hover:border-[#c9d7ee]'
+            }`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-[10px] font-semibold text-slate-700">{option.label}</div>
+                <div className="mt-0.5 font-mono text-[9px] text-slate-400">{option.data.supi}</div>
+              </div>
+              <span className={`rounded-full px-2 py-1 text-[8px] font-bold uppercase tracking-[0.1em] ${
+                active ? 'bg-[#dce7ff] text-[#4f76da]' : 'bg-white text-slate-400'
+              }`}>
+                {option.profile}
+              </span>
+            </div>
+            {variant === 'intent' && (
+              <div className="mt-2 text-[10px] leading-4 text-slate-500">{option.summary}</div>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

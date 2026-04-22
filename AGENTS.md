@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This is a Vite + React 19 + TypeScript dashboard prototype for a 6G "big screen" UI. Application code lives in `src/`: `main.tsx` boots the app, `App.tsx` currently contains most UI and state logic, and `App.css` / `index.css` hold component and global styling. Static assets are split between `src/assets/` for imported images and `public/` for files served directly such as `favicon.svg` and `icons.svg`. Tooling is configured in `vite.config.ts`, `eslint.config.js`, and the `tsconfig*.json` files.
+This is a Vite + React 19 + TypeScript dashboard prototype for a 6G "big screen" UI. Application code lives in `src/`: `main.tsx` boots the app, `App.tsx` currently contains most UI and state logic, and `App.css` / `index.css` hold component and global styling. Static assets are split between `src/assets/` for imported images and `public/` for files served directly such as `favicon.svg` and `icons.svg`. Tooling is configured in `vite.config.ts`, `eslint.config.js`, and the `tsconfig*.json` files. Use `NAMING_MODEL.md` as the canonical vocabulary for dashboard regions, tabs, and cards when discussing UI changes.
 
 ## Build, Test, and Development Commands
 - `npm install`: install dependencies.

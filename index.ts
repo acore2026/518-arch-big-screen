@@ -102,7 +102,7 @@ export default function AgenticNOCDashboard() {
   // State for Infra Diagnostics (Mock Live Processes)
   const [activeLogProcess, setActiveLogProcess] = useState(null);
   const [processLogs, setProcessLogs] = useState({
-    'planning-agent': ['[SYSTEM] Agent initialized. Ready to receive routing intents.'],
+    'system-agent': ['[SYSTEM] Agent initialized. Ready to receive routing intents.'],
     'conn-agent': ['[SYSTEM] Conn_Agent initialized.', '[DEBUG] Connected to TRF local cache.'],
     'free5gc-amf': ['[INFO] AMF: NGAP Setup Response sent to gNB-10449'],
     'free5gc-smf': ['[INFO] SMF: PFCP Association established with UPF'],
@@ -115,7 +115,7 @@ export default function AgenticNOCDashboard() {
   const logContainerRef = useRef(null);
 
   const [infraData, setInfraData] = useState([
-    { group: 'AI Control Layer', name: 'planning-agent', status: 'Running', cpu: 12.4, mem: 450, uptime: '14d 2h' },
+    { group: 'AI Control Layer', name: 'system-agent', status: 'Running', cpu: 12.4, mem: 450, uptime: '14d 2h' },
     { group: 'AI Control Layer', name: 'conn-agent', status: 'Running', cpu: 8.1, mem: 312, uptime: '14d 2h' },
     { group: 'free5GC NFs', name: 'free5gc-amf', status: 'Running', cpu: 4.2, mem: 128, uptime: '45d 12h' },
     { group: 'free5GC NFs', name: 'free5gc-smf', status: 'Running', cpu: 5.6, mem: 145, uptime: '45d 12h' },
@@ -242,13 +242,13 @@ export default function AgenticNOCDashboard() {
   function mapNfToProc(nfName) {
     if (!nfName) return null;
     const name = String(nfName).toLowerCase();
-    if (name.includes('planning')) return 'planning-agent';
+    if (name.includes('planning') || name.includes('system')) return 'system-agent';
     if (name.includes('conn')) return 'conn-agent';
     if (name.includes('sm')) return 'free5gc-smf';
     if (name.includes('am')) return 'free5gc-amf';
     if (name.includes('udm')) return 'free5gc-udm';
     if (name.includes('nwdaf')) return 'free5gc-nwdaf';
-    if (name.includes('trf')) return 'planning-agent';
+    if (name.includes('trf')) return 'system-agent';
     return null;
   }
 
@@ -268,12 +268,12 @@ export default function AgenticNOCDashboard() {
 
     if (checkAbort()) return;
     setAnimActiveNodes(new Set(['intent', 'srf']));
-    setAnimLogs([{ time: new Date().toLocaleTimeString(), text: "Intent received via SRF. Routing to Planning Agent.", type: 'info' }]);
+    setAnimLogs([{ time: new Date().toLocaleTimeString(), text: "Intent received via SRF. Routing to System Agent.", type: 'info' }]);
     await sleep(delay);
 
     if (checkAbort()) return;
-    setAnimActiveNodes(new Set(['Planning_Agent']));
-    setAnimLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), text: "Planning Agent instantiated. Analyzing goals...", type: 'info' }]);
+    setAnimActiveNodes(new Set(['System_Agent']));
+    setAnimLogs(prev => [...prev, { time: new Date().toLocaleTimeString(), text: "System Agent instantiated. Analyzing goals...", type: 'info' }]);
     await sleep(delay);
 
     for (const trace of data.sbi_traces || []) {
@@ -331,7 +331,7 @@ export default function AgenticNOCDashboard() {
       setIsProcessing(true);
       const currentIntent = inputText;
       appendProcessLog('ueransim-ue', '[INFO] Preparing natural language intent string for SRF...');
-      appendProcessLog('planning-agent', '[INFO] Running in OFFLINE DEMO mode. Using pre-calculated inference for AR Game.');
+      appendProcessLog('system-agent', '[INFO] Running in OFFLINE DEMO mode. Using pre-calculated inference for AR Game.');
       
       await new Promise(r => setTimeout(r, 2500));
       
@@ -344,7 +344,7 @@ export default function AgenticNOCDashboard() {
         },
         agent_logs: [
           {
-            agent_name: "Planning_Agent",
+            agent_name: "System_Agent",
             thoughts: [
               "Analyzed intent: User requires URLLC connectivity and real-time sensing for an AR game.",
               "Querying TRF (Tool Repository Function) to discover available tools for this service profile.",
@@ -355,7 +355,7 @@ export default function AgenticNOCDashboard() {
           {
             agent_name: "Conn_Agent",
             thoughts: [
-              "Received sub-task from Planning_Agent to establish URLLC connection.",
+              "Received sub-task from System_Agent to establish URLLC connection.",
               "Invoking Subscription_Tool to verify user slice limits for URLLC.",
               "Selecting SMC_Tool to create a new PDU session with 5QI=82 (Low Latency).",
               "Selecting UPC_Tool to enforce UPF routing rules for the GOA Central Park edge node."
@@ -363,12 +363,12 @@ export default function AgenticNOCDashboard() {
           }
         ],
         sbi_traces: [
-          { src_nf: "Planning_Agent", dest_nf: "TRF", operation: "Ntrf_ToolDiscovery", payload: { required_caps: ["URLLC", "Sensing"] }, status: "200 OK" },
-          { src_nf: "Planning_Agent", dest_nf: "Conn_Agent", operation: "Nca_TaskAssign", payload: { task: "Setup URLLC", location: "GOA Central Park" }, status: "201 Created" },
+          { src_nf: "System_Agent", dest_nf: "TRF", operation: "Ntrf_ToolDiscovery", payload: { required_caps: ["URLLC", "Sensing"] }, status: "200 OK" },
+          { src_nf: "System_Agent", dest_nf: "Conn_Agent", operation: "Nca_TaskAssign", payload: { task: "Setup URLLC", location: "GOA Central Park" }, status: "201 Created" },
           { src_nf: "Conn_Agent", dest_nf: "6G UDM", operation: "Subscription_Tool", payload: { supi: "IMSI-20893", req_snssai: "URLLC" }, status: "200 OK" },
           { src_nf: "Conn_Agent", dest_nf: "6G SM", operation: "SMC_Tool", payload: { dnn: "ar.game.edge", "5qi": 82 }, status: "201 Created" },
           { src_nf: "Conn_Agent", dest_nf: "6G SM", operation: "UPC_Tool", payload: { rule: "Route to Edge UPF" }, status: "200 OK" },
-          { src_nf: "Planning_Agent", dest_nf: "Compute_Agent", operation: "Nca_TaskAssign", payload: { task: "Environment Sensing" }, status: "201 Created" },
+          { src_nf: "System_Agent", dest_nf: "Compute_Agent", operation: "Nca_TaskAssign", payload: { task: "Environment Sensing" }, status: "201 Created" },
           { src_nf: "Compute_Agent", dest_nf: "6G NWDAF", operation: "Analytic_Tool", payload: { target: "GOA Central Park", type: "Spatial Sensing" }, status: "200 OK" }
         ]
       };
@@ -393,16 +393,16 @@ export default function AgenticNOCDashboard() {
       const payload = {
         contents: [{ parts: [{ text: currentIntent }] }],
         systemInstruction: {
-          parts: [{ text: `You are the Planning Agent in a 6G Core based on the Huawei SA2 proposal. 
+          parts: [{ text: `You are the System Agent in a 6G Core based on the Huawei SA2 proposal. 
           1. Parse the intent into semi-structured fields: Goals, Requirements, Conditions, and Guidelines (Criticality).
           2. Generate a sequence of SBI operations.
           CRITICAL RULES FOR TRACES:
-          - First trace MUST be from Planning_Agent to TRF (Tool Repository Function) to discover tools using Ntrf_ToolDiscovery.
-          - Then the Planning_Agent assigns subtasks to Conn_Agent or Compute_Agent.
+          - First trace MUST be from System_Agent to TRF (Tool Repository Function) to discover tools using Ntrf_ToolDiscovery.
+          - Then the System_Agent assigns subtasks to Conn_Agent or Compute_Agent.
           - Then domain agents (Conn_Agent, etc.) invoke specific tools hosted by 6G NFs. 
           - AVAILABLE TOOLS: AUTH_Tool, SC_Tool, MM_Tool, Reachability_Tool (hosted by 6G AM); SMC_Tool, SMAU_Tool, TR_Tool, UPC_Tool, VN_creation_tool, DNS_Resolver_Tool (hosted by 6G SM); Subscription_Tool (hosted by 6G UDM); Analytic_Tool (hosted by 6G NWDAF).
           - Target NFs MUST be exactly: 6G SM, 6G AM, 6G UDM, 6G NWDAF.
-          - Multi-Agent ReAct Log: Provide step-by-step reasoning for EACH agent involved in 'agent_logs'. For example, Planning_Agent reasons about task breakdown and ARF/TRF discovery. Conn_Agent reasons about selecting specific 6G tools based on the context.
+          - Multi-Agent ReAct Log: Provide step-by-step reasoning for EACH agent involved in 'agent_logs'. For example, System_Agent reasons about task breakdown and ARF/TRF discovery. Conn_Agent reasons about selecting specific 6G tools based on the context.
           Return JSON matching the schema.` }]
         },
         generationConfig: {
@@ -466,8 +466,8 @@ export default function AgenticNOCDashboard() {
     } catch (error) {
       console.error(error);
       setTraceData([]);
-      addTrace("Planning_Agent", "Planning_Agent", "INTERNAL_ERROR", { error: "LLM Orchestration Failed" }, "500 Internal Server Error");
-      appendProcessLog('planning-agent', '[ERROR] Failed to communicate with LLM API endpoint. Verify API Key in settings.');
+      addTrace("System_Agent", "System_Agent", "INTERNAL_ERROR", { error: "LLM Orchestration Failed" }, "500 Internal Server Error");
+      appendProcessLog('system-agent', '[ERROR] Failed to communicate with LLM API endpoint. Verify API Key in settings.');
       setIsProcessing(false);
     }
   }
@@ -536,7 +536,7 @@ export default function AgenticNOCDashboard() {
             <div className="p-6 space-y-4">
               <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-blue-800 text-xs">
                 <p>Welcome to the <strong>6G Agentic Core NOC Prototype</strong>.</p>
-                <p className="mt-2">To power the AI orchestration logic (Planning Agent, Conn Agent, etc.), this static dashboard requires a valid Google Gemini API key.</p>
+                <p className="mt-2">To power the AI orchestration logic (System Agent, Conn Agent, etc.), this static dashboard requires a valid Google Gemini API key.</p>
               </div>
 
               <div>
@@ -758,7 +758,7 @@ export default function AgenticNOCDashboard() {
                       <PortalGroup title="AGENT LAYER" icon={<Bot size={14}/>} colorClass="border-purple-200 bg-purple-50/30" className="flex-1">
                          <div className="grid grid-cols-2 gap-6 h-full content-center py-4">
                            <div className="flex items-center">
-                             <PortalNode id="Planning_Agent" title="Planning Agent" subtitle="NW-Agent orchestrator" icon={<Bot size={14}/>} active={animActiveNodes.has('Planning_Agent')} borderColorClass="border-purple-200" />
+                             <PortalNode id="System_Agent" title="System Agent" subtitle="NW-Agent orchestrator" icon={<Bot size={14}/>} active={animActiveNodes.has('System_Agent')} borderColorClass="border-purple-200" />
                            </div>
                            <div className="space-y-6">
                              <PortalNode id="Compute_Agent" title="Computing Agent" subtitle="Compute domain" icon={<Cpu size={14}/>} active={animActiveNodes.has('Compute_Agent')} borderColorClass="border-purple-200" />
@@ -860,7 +860,7 @@ export default function AgenticNOCDashboard() {
                         {expandedFolders.has('ai_layer') && (
                           <div className="ml-4 border-l border-slate-300 space-y-0.5 mt-0.5 pl-1">
                             <TreeItem id="model" label="Model: Gemini-2.5" icon={<Microchip size={10}/>} className="text-[10px]" />
-                            <TreeItem id="pa" label="Inst: Planning_Agent" icon={<Bot size={10}/>} className="text-[10px]" />
+                            <TreeItem id="pa" label="Inst: System_Agent" icon={<Bot size={10}/>} className="text-[10px]" />
                             <TreeItem id="ca" label="Inst: Conn_Agent" icon={<Bot size={10}/>} className="text-[10px]" />
                             <TreeItem id="repo" label="ARF / TRF Cluster" icon={<Library size={10}/>} className="text-[10px]" />
                           </div>
@@ -972,7 +972,7 @@ export default function AgenticNOCDashboard() {
                           <NFNode id="SRF" label="SRF Router" icon={<SlidersHorizontal/>} active={activeNFs.has('SRF')} color="slate" size="small" />
                           
                           <div className="flex flex-col items-center gap-4">
-                            <NFNode id="Planning_Agent" label="Planning Agent" icon={<BrainCircuit/>} active={activeNFs.has('Planning_Agent')} color="emerald" />
+                            <NFNode id="System_Agent" label="System Agent" icon={<BrainCircuit/>} active={activeNFs.has('System_Agent')} color="emerald" />
                             <div className="flex gap-2">
                                <NFNode id="Conn_Agent" label="Conn Agent" icon={<Network/>} active={activeNFs.has('Conn_Agent')} color="blue" size="small" />
                                <NFNode id="Compute_Agent" label="Compute Agent" icon={<Cpu/>} active={activeNFs.has('Compute_Agent')} color="sky" size="small" />
@@ -986,7 +986,7 @@ export default function AgenticNOCDashboard() {
                         </div>
                       </div>
 
-                      <Arrow active={activeNFs.has('Planning_Agent') || activeNFs.has('Conn_Agent') || activeNFs.has('Compute_Agent') || activeNFs.has('6G SM') || activeNFs.has('6G UDM') || activeNFs.has('6G NWDAF')} />
+                      <Arrow active={activeNFs.has('System_Agent') || activeNFs.has('Conn_Agent') || activeNFs.has('Compute_Agent') || activeNFs.has('6G SM') || activeNFs.has('6G UDM') || activeNFs.has('6G NWDAF')} />
 
                       {/* Legacy SBA Cluster (6G NFs) */}
                       <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 relative shadow-sm">
