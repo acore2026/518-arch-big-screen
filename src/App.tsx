@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
-  Activity, Server, Database, Network, Cpu, Wifi, 
+  Activity, Server, Database, Network, Wifi, 
   Play, CheckCircle, Clock, Search, 
   SlidersHorizontal, ChevronRight, ChevronDown, 
   Loader2, Zap, BrainCircuit, Smartphone, ArrowRight,
@@ -722,6 +722,8 @@ export default function App() {
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
   const [canvasOverlay, setCanvasOverlay] = useState<'trf' | 'arf' | null>(null);
   const playbackIdRef = useRef(0);
+  const topologyViewportRef = useRef<HTMLDivElement | null>(null);
+  const [topologyScale, setTopologyScale] = useState(1);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([
     'plmn',
     'core',
@@ -800,6 +802,24 @@ export default function App() {
     }, 5000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const element = topologyViewportRef.current;
+    if (!element) return;
+
+    const updateScale = () => {
+      const { width, height } = element.getBoundingClientRect();
+      if (!width || !height) return;
+      const nextScale = Math.min((width - 18) / 1050, (height - 10) / 550);
+      setTopologyScale(clamp(nextScale, 0.42, 1));
+    };
+
+    updateScale();
+    const observer = new ResizeObserver(updateScale);
+    observer.observe(element);
+
+    return () => observer.disconnect();
   }, []);
 
   function handleSuggest() {
@@ -1197,53 +1217,148 @@ export default function App() {
           </div>
         </div>
 
+        <style>{`
+          @keyframes data-pulse {
+            0% { stroke-dashoffset: 20; opacity: 0.4; }
+            50% { opacity: 1; }
+            100% { stroke-dashoffset: 0; opacity: 0.4; }
+          }
+          .animate-data-pulse {
+            stroke-dasharray: 10 5;
+            animation: data-pulse 2s linear infinite;
+          }
+          .topology-grid {
+            background-image: 
+              linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+              linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+            background-size: 40px 40px;
+          }
+        `}</style>
+
         {/* CENTER AREA */}
         <div className="flex flex-1 flex-col bg-white">
           
           {/* TOPOLOGY VIEW */}
-          <div className="flex h-[46%] flex-col overflow-hidden border-b border-[#dbe3ef] bg-white px-4 pt-3">
+          <div className="flex h-[60%] flex-col overflow-hidden border-b border-[#dbe3ef] bg-white px-4 pt-3">
             <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#91a4c2]">
               <Activity size={14}/> Active Network Architecture Topology
             </div>
-            <div className="relative flex flex-1 items-center justify-between px-7 pb-3">
-              <div className="z-10 flex flex-col items-center gap-2">
-                <div className="rounded bg-[#e9eff8] px-2 py-1 text-[9px] font-semibold text-slate-600 shadow-sm">Device / RAN Sim</div>
-                <NFNode id="UERANSIM_APP" icon={<Smartphone size={24}/>} label="UERANSIM" active={activeNFs.has('UERANSIM_APP')} />
-              </div>
+            <div ref={topologyViewportRef} className="relative flex flex-1 overflow-hidden rounded-[30px]">
+              <div
+                className="absolute left-1/2 top-1/2 overflow-hidden rounded-[30px] border border-slate-200/60 bg-slate-50 topology-grid shadow-[0_22px_48px_rgba(148,163,184,0.18),inset_0_1px_0_rgba(255,255,255,0.9)]"
+                style={{
+                  width: 1050,
+                  height: 550,
+                  transform: `translate(-50%, -50%) scale(${topologyScale})`,
+                  transformOrigin: 'center center',
+                }}
+              >
+                <div className="absolute inset-0">
+                <svg className="absolute inset-0 z-[5] pointer-events-none drop-shadow-sm" width="1050" height="550" viewBox="0 0 1050 550">
+                  <defs>
+                    <marker id="arrow-indigo-live" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1" />
+                    </marker>
+                  </defs>
+                  <path d="M 195 307.5 C 245 307.5, 245 325, 290 325" fill="none" stroke="#6366f1" strokeWidth="2.5" markerEnd="url(#arrow-indigo-live)" strokeLinecap="round" className="drop-shadow-sm animate-data-pulse" />
+                  <line x1="380" y1="510" x2="950" y2="510" stroke="#7dd3fc" strokeWidth="3" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="440" y1="270" x2="440" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+                  <line x1="560" y1="270" x2="560" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+                  <line x1="660" y1="270" x2="660" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+                  <line x1="760" y1="270" x2="760" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
 
-              <div className="relative mx-4 h-px flex-1 bg-[#d9e2ef]">
-                <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[#d7deea]"></div>
-              </div>
+                  <line x1="440" y1="440" x2="440" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="560" y1="440" x2="560" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="660" y1="440" x2="660" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="760" y1="440" x2="760" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="860" y1="440" x2="860" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
 
-              <div className="relative z-10">
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-[#9fc2f8] bg-[#cfe0ff] px-3 py-1 text-[9px] font-semibold text-[#3565c9] shadow-sm">Decoupled AI Layer (NW-Agents & Repositories)</div>
-                <div className="flex items-center gap-8 rounded-xl border border-dashed border-[#b9d2fb] bg-[#f7fbff] p-6">
-                  <NFNode id="SRF" icon={<SlidersHorizontal/>} label="SRF Router" size="small" active={activeNFs.has('SRF')} />
-                  <div className="flex flex-col items-center gap-6">
-                    <NFNode id="System_Agent" icon={<BrainCircuit size={28}/>} label="System Agent" color="emerald" active={activeNFs.has('System_Agent')} />
-                    <div className="flex gap-4">
-                      <NFNode id="Conn_Agent" icon={<Network/>} label="Conn Agent" color="blue" size="small" active={activeNFs.has('Conn_Agent')} />
-                      <NFNode id="Compute_Agent" icon={<Cpu/>} label="Compute Agent" color="blue" size="small" active={activeNFs.has('Compute_Agent')} />
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-4">
-                    <NFNode id="TRF" icon={<Library size={20}/>} label="TRF (Tools)" color="purple" size="small" active={activeNFs.has('TRF')} onClick={() => setCanvasOverlay('trf')} />
-                    <NFNode id="ARF" icon={<Search size={20}/>} label="ARF (Agents)" color="purple" size="small" active={activeNFs.has('ARF')} onClick={() => setCanvasOverlay('arf')} />
+                  <line x1="325" y1="340" x2="970" y2="340" stroke="#fda4af" strokeWidth="3" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="420" y1="270" x2="420" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="540" y1="270" x2="540" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="640" y1="270" x2="640" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="740" y1="270" x2="740" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="420" y1="340" x2="420" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="540" y1="340" x2="540" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="640" y1="340" x2="640" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="740" y1="340" x2="740" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                  <line x1="840" y1="340" x2="840" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+                </svg>
+
+                <div className="absolute rounded-[24px] border border-slate-300/60 bg-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-[2px] z-0 pointer-events-none" style={{ left: 280, top: 70, width: 730, height: 460 }}>
+                  <div className="relative z-20 flex justify-center pt-5">
+                    <span className="text-xl font-black tracking-[0.2em] text-slate-400 uppercase opacity-50">Agentic Core</span>
                   </div>
                 </div>
-              </div>
+                <div className="absolute rounded-[20px] border border-dashed border-slate-300/80 bg-slate-400/5 z-0 pointer-events-none" style={{ left: 490, top: 140, width: 380, height: 160 }}>
+                  <div className="absolute right-4 top-2 text-[10px] font-bold uppercase tracking-widest text-slate-400/60">Service agents</div>
+                </div>
 
-              <div className="relative mx-4 h-px flex-1 bg-[#d9e2ef]">
-                 <div className="absolute left-0 top-1/2 h-px w-full -translate-y-1/2 bg-[#d7deea]"></div>
-              </div>
+                <div className="absolute z-0 w-[2px] rounded-full bg-indigo-200/50" style={{ left: 138.5, top: 110, height: 35 }}></div>
+                <div className="absolute z-20 flex cursor-default justify-center drop-shadow-xl transition-all hover:scale-110" style={{ left: 120, top: 55, width: 40, height: 60 }}>
+                  <svg width="40" height="60" viewBox="0 0 40 60">
+                    <circle cx="20" cy="18" r="12" fill="url(#userGradLive)" stroke="#4f46e5" strokeWidth="1.5" />
+                    <path d="M 8 50 C 8 42, 32 42, 32 50 L 32 55 L 8 55 Z" fill="#ffffff" stroke="#4f46e5" strokeWidth="1.5" strokeLinejoin="round" />
+                    <defs>
+                      <linearGradient id="userGradLive" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stopColor="#818cf8" />
+                        <stop offset="100%" stopColor="#4f46e5" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                </div>
 
-              <div className="z-10 flex flex-col items-center gap-2">
-                <div className="rounded-md border border-[#b3efd0] bg-[#d8f8e6] px-2 py-1 text-[9px] font-semibold text-[#2f8a61]">6G NFs (Tool Hosts)</div>
-                <div className="grid grid-cols-2 gap-3 rounded-lg border border-[#bcefd8] bg-[#edfff5] p-4">
-                  <NFNode id="6G NWDAF" icon={<Activity size={18}/>} label="6G NWDAF" color="emerald" size="small" active={activeNFs.has('6G NWDAF')} />
-                  <NFNode id="6G UDM" icon={<Database size={18}/>} label="6G UDM" color="emerald" size="small" active={activeNFs.has('6G UDM')} />
-                  <NFNode id="6G SM" icon={<Server size={18}/>} label="6G SM" color="emerald" size="small" active={activeNFs.has('6G SM')} />
-                  <NFNode id="6G AM" icon={<Server size={18}/>} label="6G AM" color="emerald" size="small" active={activeNFs.has('6G AM')} />
+                <div className={`absolute z-10 flex flex-col overflow-hidden rounded-[32px] border border-indigo-200/50 bg-white/60 shadow-xl backdrop-blur-md transition-all ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-400/20 scale-105' : ''}`} style={{ left: 70, top: 140, width: 140, height: 220 }}>
+                  <div className="flex w-full justify-center border-b border-indigo-100 bg-indigo-50/50 py-3">
+                    <span className="text-sm font-black tracking-[0.2em] text-indigo-900 uppercase">Terminal</span>
+                  </div>
+                </div>
+                <div className="absolute z-10 w-[2px] rounded-full bg-indigo-200/50 animate-pulse" style={{ left: 138.5, top: 235, height: 60 }}></div>
+                <div className={`absolute z-20 flex items-center justify-center rounded-2xl border border-indigo-400/50 bg-gradient-to-br from-indigo-500 to-blue-600 text-center text-[11px] font-bold uppercase tracking-tighter leading-tight text-white shadow-lg shadow-blue-500/20 transition-all hover:scale-110 ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-400/40' : ''}`} style={{ left: 85, top: 195, width: 110, height: 48 }}>
+                  OS/UE<br />Agent
+                </div>
+                <div className={`absolute z-20 flex items-center justify-center rounded-2xl border border-slate-200 bg-white/90 text-center text-[11px] font-bold uppercase tracking-tighter leading-tight text-slate-600 shadow-md backdrop-blur-sm transition-all hover:scale-110 ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-200/40' : ''}`} style={{ left: 85, top: 285, width: 110, height: 48 }}>
+                  Modem/MT
+                </div>
+
+                <div className="absolute" style={{ left: 295, top: 290 }}>
+                  <TopologyEndpointNode label="SRF" active={activeNFs.has('SRF')} accent="pink" />
+                </div>
+                <div className="absolute" style={{ left: 970, top: 290 }}>
+                  <TopologyEndpointNode label="ARF" active={activeNFs.has('ARF')} accent="pink" onClick={() => setCanvasOverlay('arf')} />
+                </div>
+
+                <div className="absolute" style={{ left: 390, top: 175 }}>
+                  <TopologyAgentCard label="Sys-Agent" active={activeNFs.has('System_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+                </div>
+                <div className="absolute" style={{ left: 510, top: 175 }}>
+                  <TopologyAgentCard label="Conn-Agent" active={activeNFs.has('Conn_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+                </div>
+                <div className="absolute" style={{ left: 610, top: 175 }}>
+                  <TopologyAgentCard label="Comp-Agent" active={activeNFs.has('Compute_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+                </div>
+                <div className="absolute" style={{ left: 710, top: 175 }}>
+                  <TopologyAgentCard label="Data-Agent" active={activeNFs.has('6G NWDAF')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+                </div>
+
+                <div className="absolute" style={{ left: 395, top: 385 }}>
+                  <TopologyHostCard label="AM" active={activeNFs.has('6G AM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+                </div>
+                <div className="absolute" style={{ left: 515, top: 385 }}>
+                  <TopologyHostCard label="SM" active={activeNFs.has('6G SM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+                </div>
+                <div className="absolute" style={{ left: 615, top: 385 }}>
+                  <TopologyHostCard label="Policy" active={activeNFs.has('6G UDM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+                </div>
+                <div className="absolute" style={{ left: 715, top: 385 }}>
+                  <TopologyHostCard label="UP" active={activeNFs.has('6G NWDAF')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+                </div>
+                <div className="absolute" style={{ left: 815, top: 385 }}>
+                  <TopologyHostCard label="DP" toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+                </div>
+
+                <div className="absolute z-10 text-[13px] font-black tracking-[0.3em] text-rose-500/60 uppercase" style={{ left: 915, top: 320 }}>ABI</div>
+                <div className="absolute z-10 text-[13px] font-black tracking-[0.3em] text-sky-500/60 uppercase" style={{ left: 915, top: 490 }}>DBI</div>
                 </div>
               </div>
             </div>
@@ -1902,46 +2017,112 @@ function ToolBadge({ label, onClick }: any) {
   );
 }
 
-function NFNode({ icon, label, active, color = "blue", size = "normal", onClick }: any) {
-  const themes: any = {
-    blue: "border-blue-200 bg-blue-50/50 text-blue-600",
-    emerald: "border-emerald-200 bg-emerald-50/50 text-emerald-600",
-    purple: "border-purple-200 bg-purple-50/50 text-purple-600",
-    slate: "border-slate-200 bg-slate-50/50 text-slate-600"
+function StackedTag({
+  text,
+  colorTheme = 'blue',
+  onClick,
+  positionClass = '',
+}: {
+  text: string;
+  colorTheme?: 'blue' | 'fuchsia';
+  onClick?: () => void;
+  positionClass?: string;
+}) {
+  const themeMap = {
+    blue: 'from-sky-500 to-blue-600 shadow-blue-200/50',
+    fuchsia: 'from-fuchsia-500 to-purple-600 shadow-purple-200/50',
   };
-  const activeThemes: any = {
-    blue: "border-blue-400 bg-blue-50",
-    emerald: "border-emerald-400 bg-emerald-50",
-    purple: "border-purple-400 bg-purple-50",
-    slate: "border-slate-400 bg-slate-100"
-  };
-  const dimensions = size === 'small' ? 'h-10 w-10' : 'h-16 w-16';
+  const bgClass = themeMap[colorTheme] || themeMap.blue;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`z-30 group flex items-center justify-center transition-all active:scale-95 ${positionClass}`}
+    >
+      <div className={`px-2.5 py-0.5 rounded-full bg-gradient-to-br ${bgClass} text-white text-[9px] font-bold tracking-widest uppercase shadow-lg border border-white/20 hover:brightness-110`}>
+        {text}
+      </div>
+    </button>
+  );
+}
+
+function TopologyEndpointNode({
+  label,
+  active,
+  accent,
+  onClick,
+}: {
+  label: string;
+  active?: boolean;
+  accent: 'pink' | 'blue';
+  onClick?: () => void;
+}) {
   const isClickable = typeof onClick === 'function';
-  
+  const themeClasses = accent === 'pink'
+    ? 'border-rose-200/50 bg-rose-50/40 text-rose-600 ring-rose-500/20'
+    : 'border-sky-200/50 bg-sky-50/40 text-sky-600 ring-sky-500/20';
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative z-10 flex h-[70px] w-[60px] flex-col items-center justify-center rounded-2xl border backdrop-blur-md shadow-sm transition-all ${
+        themeClasses
+      } ${active ? 'scale-110 ring-4 !border-rose-400 !bg-rose-100/60' : ''} ${isClickable ? 'hover:scale-105 hover:bg-white/80' : 'cursor-default'}`}
+    >
+      <Database size={20} className="mb-1 opacity-80" />
+      <span className="text-[14px] font-black tracking-tighter">{label}</span>
+    </button>
+  );
+}
+
+function TopologyAgentCard({
+  label,
+  active,
+  skillLabel,
+  onSkillClick,
+}: {
+  label: string;
+  active?: boolean;
+  skillLabel: string;
+  onSkillClick?: () => void;
+}) {
+  const lines = label.split('-');
+
+  return (
+    <div className={`relative z-10 flex h-[95px] w-[84px] flex-col items-center justify-center rounded-2xl border border-rose-200/50 bg-white/40 backdrop-blur-sm shadow-sm transition-all hover:-translate-y-1 ${active ? 'scale-110 ring-4 ring-rose-400/30 !border-rose-400 !bg-rose-50/80' : ''}`}>
+      <BrainCircuit size={18} className="mb-1.5 text-rose-500 opacity-70" />
+      <div className="mb-1 text-center text-[11px] font-bold leading-tight text-slate-700">
+        {lines.map((line, idx) => (
+          <div key={idx}>{line}{idx === 0 && lines.length > 1 ? '-' : ''}</div>
+        ))}
+      </div>
+      <StackedTag text={skillLabel} onClick={onSkillClick} positionClass="absolute -bottom-2" colorTheme="fuchsia" />
+    </div>
+  );
+}
+
+function TopologyHostCard({
+  label,
+  active,
+  toolLabel,
+  onToolsClick,
+}: {
+  label: string;
+  active?: boolean;
+  toolLabel: string;
+  onToolsClick?: () => void;
+}) {
   return (
     <div
-      className={`flex flex-col items-center gap-1.5 group ${isClickable ? 'cursor-pointer' : ''}`}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (!isClickable) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      role={isClickable ? 'button' : undefined}
-      tabIndex={isClickable ? 0 : undefined}
+      className={`relative z-10 flex h-[65px] w-[74px] flex-col items-center justify-center rounded-xl border border-sky-200/50 bg-white/40 backdrop-blur-sm shadow-sm transition-all hover:shadow-md ${
+        active ? 'scale-110 ring-4 ring-sky-400/30 !border-sky-400 !bg-sky-50/80' : ''
+      }`}
     >
-      <div className={`
-        ${dimensions} relative flex items-center justify-center rounded-lg border-2 transition-all duration-300
-        ${active ? activeThemes[color] : themes[color]}
-        ${active ? 'scale-105 shadow-[0_0_0_3px_rgba(191,219,254,0.45)]' : ''}
-        ${isClickable ? 'group-hover:scale-105 group-hover:shadow-[0_8px_20px_rgba(99,102,241,0.14)]' : ''}
-      `}>
-        {icon}
-        {active && <div className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full border border-white bg-[#4f76da] animate-pulse"></div>}
-      </div>
-      <span className={`text-[9px] font-bold tracking-tight ${active ? 'text-slate-700' : 'text-slate-500'}`}>{label}</span>
+      <StackedTag text={toolLabel} onClick={onToolsClick} positionClass="absolute -top-2" colorTheme="blue" />
+      <Server size={16} className="mb-1 text-sky-500 opacity-70" />
+      <div className="text-[12px] font-bold tracking-tight text-slate-700">{label}</div>
     </div>
   );
 }
