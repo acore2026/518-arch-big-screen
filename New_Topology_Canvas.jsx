@@ -113,12 +113,12 @@ export default function App() {
           </div>
         </div>
 
-        {/* Connection OS/UE Agent -> Modem/MT */}
+        {/* Connection OS Agent -> Modem/MT */}
         <div className="absolute w-[3px] bg-indigo-200 z-10 rounded-full" style={{ left: 138.5, top: 235, height: 60 }}></div>
 
-        {/* OS/UE Agent */}
+        {/* OS Agent */}
         <div className="absolute bg-gradient-to-br from-indigo-500 to-blue-600 shadow-lg shadow-blue-500/30 rounded-xl flex items-center justify-center text-center font-bold text-white z-20 hover:scale-105 transition-transform text-sm leading-tight border border-indigo-400" style={{ left: 85, top: 195, width: 110, height: 45 }}>
-          OS/UE<br/>Agent
+          OS<br/>Agent
         </div>
 
         {/* Modem/MT */}

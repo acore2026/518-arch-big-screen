@@ -13,7 +13,7 @@ Examples:
 - `Right Panel > UE STATE > Current Policy`
 - `Center Workspace > Topology Canvas > TRF (Tools)`
 - `Left Sidebar > Topology Explorer > UERANSIM`
-- `Top Header > UE Selector Placement Toggle`
+- `Top Header > Header UE Selector`
 
 ## Layout Map
 
@@ -32,7 +32,6 @@ Components:
 
 - `Product Badge`
 - `KPI Strip`
-- `UE Selector Placement Toggle`
 - `Header UE Selector`
 - `Clock`
 
@@ -52,7 +51,6 @@ Inside `Topology Explorer`, use these names:
 - `AI Control Layer`
 - `6G NFs`
 - `UERANSIM`
-- `UE Targets` (only when sidebar selector placement is active)
 
 ## 3. Center Workspace
 
@@ -93,7 +91,7 @@ Tabs:
 
 Use these canonical names inside tabs:
 
-- `INTENT > Target UE`
+- `INTENT > Active Target UE`
 - `INTENT > Natural Language Request`
 - `INTENT > Action Row`
 - `INTENT > Semi-Structured Intent`
@@ -111,7 +109,7 @@ Good examples:
 
 - `Change Right Panel > UE STATE > Live Service Metrics`
 - `Restyle Center Workspace > Topology Canvas > System Agent`
-- `Move Left Sidebar > UE Targets below UERANSIM`
+- `Update Top Header > Header UE Selector`
 - `Update Right Panel > INTENT > Action Row`
 
 Avoid vague references like `the box on the right` or `the middle node` unless the target is already clear from context.

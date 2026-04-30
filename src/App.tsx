@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
-import { 
-  Activity, Server, Database, Network, Wifi, 
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import {
+  Activity, Server, Database, Network,
   Play, CheckCircle, Clock, Search, 
   SlidersHorizontal, ChevronRight, ChevronDown, 
   Loader2, Zap, BrainCircuit, Smartphone, ArrowRight,
-  Library, FileJson, Layers, Bot, Microchip, Radio, MapPin, Signal,
+  Library, FileJson, Bot, Radio, MapPin, Signal,
   RotateCcw, HardDrive, X, Code, RefreshCw
 } from 'lucide-react';
 
@@ -28,8 +28,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/dashscope/compatible
 const MODEL_NAME = import.meta.env.VITE_MODEL_NAME || 'glm-5';
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 const USE_REAL_LLM = String(import.meta.env.VITE_USE_REAL_LLM || '').toLowerCase() === 'true';
-const DISPLAY_MODEL_NAME = MODEL_NAME;
 const SESSION_STORAGE_KEY = 'agentic-core-session-history';
+const TOPOLOGY_DEBUG_PATH = '/debug/topology-canvas';
 
 const SUGGESTED_INTENTS = [
   DEFAULT_INTENT_TEXT,
@@ -144,8 +144,6 @@ type MockUeOption = {
   data: UeSnapshot;
 };
 
-type SelectorPlacement = 'header' | 'sidebar' | 'intent';
-
 const DEFAULT_UE_DATA: UeSnapshot = {
   supi: 'imsi-208930000000001',
   pei: 'imeisv-35431108221433-12',
@@ -222,11 +220,23 @@ const TRF_TOOL_GROUPS = [
   { label: '6G NWDAF Tools', tools: ['Analytic_Tool'] },
 ];
 
+const ARF_SKILLS = [
+  'Intent Decomposition',
+  'Agent Selection',
+  'Execution Planning',
+  'Closed-Loop Verification',
+  'Policy Reasoning',
+];
+
 const safeRender = (val: any) => {
   if (val === null || val === undefined) return '';
   if (typeof val === 'object') return JSON.stringify(val);
   return String(val);
 };
+
+function getToolHostTag(tool: string) {
+  return (TOOL_DEFINITIONS[tool]?.host || 'NF').replace(/^6G\s+/, '');
+}
 
 const UE_METRIC_LABELS = ['-30s', '-25s', '-20s', '-15s', '-10s', '-5s', 'Now'];
 
@@ -266,7 +276,7 @@ function cloneUeData(data: UeSnapshot): UeSnapshot {
 const MOCK_UES: MockUeOption[] = [
   {
     id: 'ar-gamer-01',
-    label: 'AR Gamer 01',
+    label: 'UE 01',
     profile: 'AR-Gamer',
     summary: 'Edge-rendered AR session with mobility-sensitive QoS.',
     data: {
@@ -325,14 +335,14 @@ const MOCK_UES: MockUeOption[] = [
   },
   {
     id: 'agv-swarm-01',
-    label: 'AGV Swarm 01',
+    label: 'UE 02',
     profile: 'AGV-Swarm',
     summary: 'Factory URLLC control plane for coordinated AGV movement.',
     data: cloneUeData(DEFAULT_UE_DATA),
   },
   {
     id: 'smart-meter-01',
-    label: 'Smart Meter 01',
+    label: 'UE 03',
     profile: 'Smart-Meter',
     summary: 'Massive IoT metering endpoint with low-power periodic reachability.',
     data: {
@@ -716,7 +726,6 @@ export default function App() {
     }
   });
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
-  const [selectorPlacement, setSelectorPlacement] = useState<SelectorPlacement>('intent');
   const [selectedUeId, setSelectedUeId] = useState<string>(MOCK_UES[0].id);
   
   const [selectedTool, setSelectedTool] = useState<string | null>(null);
@@ -725,14 +734,10 @@ export default function App() {
   const topologyViewportRef = useRef<HTMLDivElement | null>(null);
   const [topologyScale, setTopologyScale] = useState(1);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set([
-    'plmn',
-    'core',
-    'ai_layer',
-    'nfs',
-    'am_t',
-    'sm_t',
-    'udm_t',
-    'nwdaf_t',
+    'explorer-agents',
+    'explorer-skills',
+    'explorer-tools',
+    'explorer-network-functions',
   ]));
   const [ueData, setUeData] = useState<UeSnapshot | null>(() => cloneUeData(MOCK_UES[0].data));
 
@@ -769,6 +774,7 @@ export default function App() {
 
   const [kpis, setKpis] = useState({ pdu: 7, cpLoad: 56, latency: 34.9 });
   const selectedUe = MOCK_UES.find((ue) => ue.id === selectedUeId) || null;
+  const isTopologyDebugPath = typeof window !== 'undefined' && window.location.pathname === TOPOLOGY_DEBUG_PATH;
 
   useEffect(() => {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionHistory));
@@ -956,6 +962,156 @@ export default function App() {
     }
   }
 
+  const topologyCanvas = (
+    <>
+      <style>{`
+        @keyframes data-pulse {
+          0% { stroke-dashoffset: 20; opacity: 0.4; }
+          50% { opacity: 1; }
+          100% { stroke-dashoffset: 0; opacity: 0.4; }
+        }
+        .animate-data-pulse {
+          stroke-dasharray: 10 5;
+          animation: data-pulse 2s linear infinite;
+        }
+        .topology-grid {
+          background-image:
+            linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+          background-size: 40px 40px;
+        }
+      `}</style>
+      <div ref={topologyViewportRef} className="relative flex flex-1 overflow-hidden rounded-[30px]">
+        <div
+          className="absolute left-1/2 top-1/2 overflow-hidden rounded-[30px] border border-slate-200/60 bg-slate-50 topology-grid shadow-[0_22px_48px_rgba(148,163,184,0.18),inset_0_1px_0_rgba(255,255,255,0.9)]"
+          style={{
+            width: 1050,
+            height: 550,
+            transform: `translate(-50%, -50%) scale(${topologyScale})`,
+            transformOrigin: 'center center',
+          }}
+        >
+          <div className="absolute inset-0">
+          <svg className="absolute inset-0 z-[5] pointer-events-none drop-shadow-sm" width="1050" height="550" viewBox="0 0 1050 550">
+            <defs>
+              <marker id="arrow-indigo-live" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1" />
+              </marker>
+            </defs>
+            <path d="M 195 325 L 290 325" fill="none" stroke="#6366f1" strokeWidth="2.5" markerEnd="url(#arrow-indigo-live)" strokeLinecap="round" className="drop-shadow-sm animate-data-pulse" />
+            <line x1="380" y1="510" x2="950" y2="510" stroke="#7dd3fc" strokeWidth="3" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="440" y1="270" x2="440" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+            <line x1="560" y1="270" x2="560" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+            <line x1="660" y1="270" x2="660" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+            <line x1="760" y1="270" x2="760" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
+
+            <line x1="440" y1="440" x2="440" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="560" y1="440" x2="560" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="660" y1="440" x2="660" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="760" y1="440" x2="760" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="860" y1="440" x2="860" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+
+            <line x1="325" y1="340" x2="970" y2="340" stroke="#fda4af" strokeWidth="3" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="420" y1="270" x2="420" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="540" y1="270" x2="540" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="640" y1="270" x2="640" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="740" y1="270" x2="740" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="420" y1="340" x2="420" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="540" y1="340" x2="540" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="640" y1="340" x2="640" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="740" y1="340" x2="740" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            <line x1="840" y1="340" x2="840" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
+            </svg>
+
+            <div className="absolute rounded-[24px] border border-slate-300/60 bg-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-[2px] z-0 pointer-events-none" style={{ left: 280, top: 70, width: 730, height: 460 }}>
+            <div className="relative z-20 flex justify-center pt-5">
+              <span className="text-xl font-black tracking-[0.2em] text-slate-400 uppercase opacity-50">Agentic Core</span>
+            </div>
+            </div>
+            <div className="absolute rounded-[20px] border border-dashed border-slate-300/80 bg-slate-400/5 z-0 pointer-events-none" style={{ left: 490, top: 140, width: 380, height: 160 }}>
+            <div className="absolute right-4 top-2 text-[10px] font-bold uppercase tracking-widest text-slate-400/60">Service agents</div>
+            </div>
+
+            <div className="absolute z-0 w-[2px] rounded-full bg-indigo-200/50" style={{ left: 138.5, top: 126, height: 35 }}></div>
+            <div className="absolute z-20 flex cursor-default justify-center drop-shadow-xl transition-all hover:scale-110" style={{ left: 120, top: 71, width: 40, height: 60 }}>
+            <svg width="40" height="60" viewBox="0 0 40 60">
+              <circle cx="20" cy="18" r="12" fill="url(#userGradLive)" stroke="#4f46e5" strokeWidth="1.5" />
+              <path d="M 8 50 C 8 42, 32 42, 32 50 L 32 55 L 8 55 Z" fill="#ffffff" stroke="#4f46e5" strokeWidth="1.5" strokeLinejoin="round" />
+              <defs>
+                <linearGradient id="userGradLive" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#818cf8" />
+                  <stop offset="100%" stopColor="#4f46e5" />
+                </linearGradient>
+              </defs>
+            </svg>
+            </div>
+
+            <div className={`absolute z-10 flex flex-col overflow-hidden rounded-[32px] border border-indigo-200/50 bg-white/60 shadow-xl backdrop-blur-md transition-all ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-400/20 scale-105' : ''}`} style={{ left: 70, top: 156, width: 140, height: 220 }}>
+            <div className="flex w-full justify-center border-b border-indigo-100 bg-indigo-50/50 py-3">
+              <span className="text-sm font-black tracking-[0.2em] text-indigo-900 uppercase">Terminal</span>
+            </div>
+            </div>
+            <div className="absolute z-10 w-[2px] rounded-full bg-indigo-200/50 animate-pulse" style={{ left: 138.5, top: 251, height: 60 }}></div>
+            <div className={`absolute z-20 flex items-center justify-center rounded-2xl border border-indigo-400/50 bg-gradient-to-br from-indigo-500 to-blue-600 text-center text-[11px] font-bold uppercase tracking-tighter leading-tight text-white shadow-lg shadow-blue-500/20 transition-all hover:scale-110 ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-400/40' : ''}`} style={{ left: 85, top: 211, width: 110, height: 48 }}>
+            OS<br />(Agent)
+            </div>
+            <div className={`absolute z-20 flex items-center justify-center rounded-2xl border border-slate-200 bg-white/90 text-center text-[11px] font-bold uppercase tracking-tighter leading-tight text-slate-600 shadow-md backdrop-blur-sm transition-all hover:scale-110 ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-200/40' : ''}`} style={{ left: 85, top: 301, width: 110, height: 48 }}>
+            Modem/MT
+            </div>
+          <div className="absolute" style={{ left: 295, top: 290 }}>
+            <TopologyEndpointNode label="SRF" active={activeNFs.has('SRF')} accent="pink" />
+          </div>
+          <div className="absolute" style={{ left: 970, top: 290 }}>
+            <TopologyEndpointNode label="ARF" active={activeNFs.has('ARF')} accent="pink" onClick={() => setCanvasOverlay('arf')} />
+          </div>
+
+          <div className="absolute" style={{ left: 390, top: 175 }}>
+            <TopologyAgentCard label="Sys-Agent" active={activeNFs.has('System_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+          </div>
+          <div className="absolute" style={{ left: 510, top: 175 }}>
+            <TopologyAgentCard label="Conn-Agent" active={activeNFs.has('Conn_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+          </div>
+          <div className="absolute" style={{ left: 610, top: 175 }}>
+            <TopologyAgentCard label="Comp-Agent" active={activeNFs.has('Compute_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+          </div>
+          <div className="absolute" style={{ left: 710, top: 175 }}>
+            <TopologyAgentCard label="Data-Agent" active={activeNFs.has('6G NWDAF')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
+          </div>
+
+          <div className="absolute" style={{ left: 395, top: 385 }}>
+            <TopologyHostCard label="AM" active={activeNFs.has('6G AM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+          </div>
+          <div className="absolute" style={{ left: 515, top: 385 }}>
+            <TopologyHostCard label="SM" active={activeNFs.has('6G SM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+          </div>
+          <div className="absolute" style={{ left: 615, top: 385 }}>
+            <TopologyHostCard label="Policy" active={activeNFs.has('6G UDM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+          </div>
+          <div className="absolute" style={{ left: 715, top: 385 }}>
+            <TopologyHostCard label="UP" active={activeNFs.has('6G NWDAF')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+          </div>
+          <div className="absolute" style={{ left: 815, top: 385 }}>
+            <TopologyHostCard label="DP" toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
+          </div>
+
+          <div className="absolute z-10 text-[13px] font-black tracking-[0.3em] text-rose-500/60 uppercase" style={{ left: 915, top: 320 }}>ABI</div>
+          <div className="absolute z-10 text-[13px] font-black tracking-[0.3em] text-sky-500/60 uppercase" style={{ left: 915, top: 490 }}>DBI</div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  if (isTopologyDebugPath) {
+    return (
+      <div className="h-screen overflow-hidden bg-[#edf2f7] p-4">
+        <div className="flex h-full flex-col rounded-[28px] border border-[#d9e1ee] bg-white p-4 shadow-[0_20px_55px_rgba(30,41,59,0.12)]">
+          {topologyCanvas}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen bg-[#edf2f7] p-1.5 text-[11px] text-slate-700 overflow-hidden">
       <div className="relative flex h-full flex-col overflow-hidden rounded-[18px] border border-[#d9e1ee] bg-white shadow-[0_8px_28px_rgba(30,41,59,0.08)]">
@@ -1091,29 +1247,7 @@ export default function App() {
             <KpiBlock label="AGENTIC CP LOAD" value={`${kpis.cpLoad}%`} trend="up" />
             <KpiBlock label="AVG SBI LATENCY" value={`${kpis.latency.toFixed(1)}ms`} trend="down" />
           </div>
-          <div className="flex items-center gap-3 rounded-lg border border-slate-700/90 bg-slate-900/25 px-3 py-1.5">
-            <div>
-              <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-500">UE Selector</div>
-              <div className="mt-1 flex gap-1">
-                {(['header', 'sidebar', 'intent'] as SelectorPlacement[]).map((placement) => (
-                  <button
-                    key={placement}
-                    onClick={() => setSelectorPlacement(placement)}
-                    className={`rounded px-2 py-1 text-[8px] font-bold uppercase tracking-[0.12em] transition-colors ${
-                      selectorPlacement === placement
-                        ? 'bg-[#2f67f6] text-white'
-                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
-                    }`}
-                  >
-                    {placement}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          {selectorPlacement === 'header' && (
-            <HeaderUeSelector selectedUe={selectedUe} options={MOCK_UES} onSelect={handleSelectUe} />
-          )}
+          <HeaderUeSelector selectedUe={selectedUe} options={MOCK_UES} onSelect={handleSelectUe} />
           <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
             <Clock size={14} /> <span>11:47:27 UTC</span>
           </div>
@@ -1125,115 +1259,87 @@ export default function App() {
         
         {/* SIDEBAR */}
         <div className="flex w-[256px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-[#dbe3ef] bg-[#f6f8fb]">
-          <div className="border-b border-[#dbe3ef] bg-[#eef2f8] px-3 py-2">
-            <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Topology Explorer</h2>
+          <div className="border-b border-[#c8edff] bg-gradient-to-r from-[#e9fbff] via-[#f4fcff] to-[#eef6ff] px-2 py-2 shadow-[inset_0_-1px_0_rgba(56,189,248,0.18)]">
+            <div className="flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-[#38bdf8] shadow-[0_0_12px_rgba(56,189,248,0.75)]"></span>
+              <h2 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#0f2a44]">
+                Topology Explorer
+              </h2>
+            </div>
           </div>
-          <div className="p-3">
-            <TreeItem id="plmn" label="PLMN 001-01" icon={<Network size={12}/>} hasChildren isExpanded={expandedFolders.has('plmn')} onToggle={toggleFolder} active={true} />
-            {expandedFolders.has('plmn') && (
-              <div className="ml-4 mt-1 space-y-1 border-l border-[#d8dfeb] pl-2">
-                <TreeItem id="core" label="Decoupled Core" icon={<Layers size={12}/>} hasChildren isExpanded={expandedFolders.has('core')} onToggle={toggleFolder} />
-                {expandedFolders.has('core') && (
-                  <div className="ml-4 space-y-1 border-l border-[#d8dfeb] pl-2">
-                    <TreeItem id="ai_layer" label="AI Control Layer" icon={<BrainCircuit size={12}/>} hasChildren isExpanded={expandedFolders.has('ai_layer')} onToggle={toggleFolder} />
-                    {expandedFolders.has('ai_layer') && (
-                      <div className="ml-4 space-y-0.5 text-slate-400">
-                        <TreeItem id="m1" label={`Model: ${DISPLAY_MODEL_NAME}`} icon={<Microchip size={10}/>} />
-                        <TreeItem id="pa" label="Inst: System_Agent" icon={<Bot size={10}/>} />
-                        <TreeItem id="ca" label="Inst: Conn_Agent" icon={<Bot size={10}/>} />
-                        <TreeItem id="cl" label="ARF / TRF Cluster" icon={<Library size={10}/>} />
-                      </div>
-                    )}
-                    <TreeItem id="nfs" label="6G NFs" icon={<Database size={12}/>} hasChildren isExpanded={expandedFolders.has('nfs')} onToggle={toggleFolder} />
-                    {expandedFolders.has('nfs') && (
-                      <div className="ml-4 space-y-0.5 text-slate-400">
-                        <TreeItem id="am" label="6G AM" icon={<Server size={10}/>} />
-                        <TreeItem id="sm" label="6G SM" icon={<Server size={10}/>} />
-                        <TreeItem id="ud" label="6G UDM" icon={<Server size={10}/>} />
-                        <TreeItem id="nw" label="6G NWDAF" icon={<Server size={10}/>} />
-                      </div>
-                    )}
+          <div className="px-2 py-3">
+            <div className="rounded-xl border border-[#dbe3ef] bg-white p-1 shadow-[0_4px_12px_rgba(148,163,184,0.10)]">
+              <div className="space-y-0.5">
+                <TreeItem variant="explorer" id="explorer-ue" label="UE" icon={<Smartphone size={16} className="text-[#0f766e]" />} hasChildren isExpanded={expandedFolders.has('explorer-ue')} onToggle={toggleFolder} count={12} />
+                {expandedFolders.has('explorer-ue') && (
+                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                    <TreeItem variant="explorer" label="UE-07" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="UE-08" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="UE-03" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="Others" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
                   </div>
                 )}
-                <TreeItem id="ran" label="UERANSIM" icon={<Wifi size={12}/>} hasChildren isExpanded={expandedFolders.has('ran')} onToggle={toggleFolder} />
-                {expandedFolders.has('ran') && (
-                  <div className="ml-4 space-y-2 text-slate-400">
-                    <div className="space-y-0.5">
-                    <TreeItem id="p1" label="Profile: AR-Gamer" icon={<Smartphone size={10}/>} />
-                    <TreeItem id="p2" label="Profile: AGV-Swarm" icon={<Smartphone size={10}/>} />
-                    <TreeItem id="p3" label="Profile: Smart-Meter" icon={<Smartphone size={10}/>} />
-                    </div>
-                    {selectorPlacement === 'sidebar' && (
-                      <div className="rounded-lg border border-[#dbe3ef] bg-white/80 p-2 shadow-[0_1px_3px_rgba(148,163,184,0.12)]">
-                        <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">UE Targets</div>
-                        <UeSelectionList
-                          options={MOCK_UES}
-                          selectedUeId={selectedUeId}
-                          onSelect={handleSelectUe}
-                          variant="sidebar"
-                        />
-                      </div>
-                    )}
+
+                <TreeItem variant="explorer" id="explorer-agents" label="Agents" icon={<Bot size={16} className="text-[#1d4ed8]" />} hasChildren isExpanded={expandedFolders.has('explorer-agents')} onToggle={toggleFolder} count={3} />
+                {expandedFolders.has('explorer-agents') && (
+                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                    <TreeItem variant="explorer" label="System_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="Conn_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="Compute_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
+                  </div>
+                )}
+
+                <TreeItem variant="explorer" id="explorer-network-functions" label="Network Functions" icon={<Database size={16} className="text-[#0369a1]" />} hasChildren isExpanded={expandedFolders.has('explorer-network-functions')} onToggle={toggleFolder} count={5} />
+                {expandedFolders.has('explorer-network-functions') && (
+                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                    <TreeItem variant="explorer" label="AM" icon={<Radio size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="SM" icon={<SlidersHorizontal size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="Policy" icon={<FileJson size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="UP" icon={<Activity size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                    <TreeItem variant="explorer" label="DP" icon={<Database size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                  </div>
+                )}
+
+                <TreeItem variant="explorer" id="explorer-skills" label="Skills" icon={<BrainCircuit size={16} className="text-[#5b21b6]" />} hasChildren isExpanded={expandedFolders.has('explorer-skills')} onToggle={toggleFolder} count={ARF_SKILLS.length} />
+                {expandedFolders.has('explorer-skills') && (
+                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                    {ARF_SKILLS.map((skill) => (
+                      <TreeItem key={skill} variant="explorer" label={skill} icon={<BrainCircuit size={14} className="text-[#5b21b6]" />} rightBadge="ARF" level={1} />
+                    ))}
+                  </div>
+                )}
+
+                <TreeItem variant="explorer" id="explorer-tools" label="Tools" icon={<Code size={16} className="text-[#0f172a]" />} hasChildren isExpanded={expandedFolders.has('explorer-tools')} onToggle={toggleFolder} count={TRF_TOOL_GROUPS.reduce((sum, group) => sum + group.tools.length, 0)} />
+                {expandedFolders.has('explorer-tools') && (
+                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                    {TRF_TOOL_GROUPS.flatMap((group) => group.tools).map((tool) => (
+                      <TreeItem
+                        key={tool}
+                        variant="explorer"
+                        label={tool}
+                        icon={<Code size={14} className="text-[#0f172a]" />}
+                        rightBadge={getToolHostTag(tool)}
+                        onClick={() => setSelectedTool(tool)}
+                        level={1}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <TreeItem variant="explorer" id="explorer-infra" label="Infra" icon={<HardDrive size={16} className="text-[#334155]" />} hasChildren isExpanded={expandedFolders.has('explorer-infra')} onToggle={toggleFolder} count={5} />
+                {expandedFolders.has('explorer-infra') && (
+                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                    <TreeItem variant="explorer" label="AI Runtime" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                    <TreeItem variant="explorer" label="Core Cluster" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                    <TreeItem variant="explorer" label="RAN Sim" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                    <TreeItem variant="explorer" label="Trace Store" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                    <TreeItem variant="explorer" label="Telemetry" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
                   </div>
                 )}
               </div>
-            )}
-          </div>
-          <div className="mt-auto border-t border-[#dbe3ef] bg-[#f8fafd] p-3">
-            <h2 className="mb-2 flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500"><Library size={11} className="text-[#8e63ff]" /> TRF Tool Registry</h2>
-            <div className="ml-4 space-y-1">
-              <TreeItem id="am_t" label="6G AM Tools" hasChildren isExpanded={expandedFolders.has('am_t')} onToggle={toggleFolder} />
-              {expandedFolders.has('am_t') && (
-                <div className="ml-4 mt-1 flex flex-wrap gap-1">
-                  <ToolBadge label="AUTH_Tool" onClick={() => setSelectedTool("AUTH_Tool")} />
-                  <ToolBadge label="SC_Tool" onClick={() => setSelectedTool("SC_Tool")} />
-                  <ToolBadge label="MM_Tool" onClick={() => setSelectedTool("MM_Tool")} />
-                  <ToolBadge label="Reachability_Tool" onClick={() => setSelectedTool("Reachability_Tool")} />
-                </div>
-              )}
-              <TreeItem id="sm_t" label="6G SM Tools" hasChildren isExpanded={expandedFolders.has('sm_t')} onToggle={toggleFolder} />
-              {expandedFolders.has('sm_t') && (
-                <div className="ml-4 mt-1 flex flex-wrap gap-1">
-                  <ToolBadge label="SMC_Tool" onClick={() => setSelectedTool("SMC_Tool")} />
-                  <ToolBadge label="TR_Tool" onClick={() => setSelectedTool("TR_Tool")} />
-                  <ToolBadge label="UPC_Tool" onClick={() => setSelectedTool("UPC_Tool")} />
-                  <ToolBadge label="VN_creation_tool" onClick={() => setSelectedTool("VN_creation_tool")} />
-                  <ToolBadge label="DNS_Resolver_Tool" onClick={() => setSelectedTool("DNS_Resolver_Tool")} />
-                </div>
-              )}
-              <TreeItem id="udm_t" label="6G UDM Tools" hasChildren isExpanded={expandedFolders.has('udm_t')} onToggle={toggleFolder} />
-              {expandedFolders.has('udm_t') && (
-                <div className="ml-4 mt-1 flex flex-wrap gap-1">
-                  <ToolBadge label="Subscription_Tool" onClick={() => setSelectedTool("Subscription_Tool")} />
-                </div>
-              )}
-              <TreeItem id="nwdaf_t" label="6G NWDAF Tools" hasChildren isExpanded={expandedFolders.has('nwdaf_t')} onToggle={toggleFolder} />
-              {expandedFolders.has('nwdaf_t') && (
-                <div className="ml-4 mt-1 flex flex-wrap gap-1">
-                  <ToolBadge label="Analytic_Tool" onClick={() => setSelectedTool("Analytic_Tool")} />
-                </div>
-              )}
             </div>
           </div>
         </div>
-
-        <style>{`
-          @keyframes data-pulse {
-            0% { stroke-dashoffset: 20; opacity: 0.4; }
-            50% { opacity: 1; }
-            100% { stroke-dashoffset: 0; opacity: 0.4; }
-          }
-          .animate-data-pulse {
-            stroke-dasharray: 10 5;
-            animation: data-pulse 2s linear infinite;
-          }
-          .topology-grid {
-            background-image: 
-              linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-              linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
-            background-size: 40px 40px;
-          }
-        `}</style>
 
         {/* CENTER AREA */}
         <div className="flex flex-1 flex-col bg-white">
@@ -1243,125 +1349,7 @@ export default function App() {
             <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#91a4c2]">
               <Activity size={14}/> Active Network Architecture Topology
             </div>
-            <div ref={topologyViewportRef} className="relative flex flex-1 overflow-hidden rounded-[30px]">
-              <div
-                className="absolute left-1/2 top-1/2 overflow-hidden rounded-[30px] border border-slate-200/60 bg-slate-50 topology-grid shadow-[0_22px_48px_rgba(148,163,184,0.18),inset_0_1px_0_rgba(255,255,255,0.9)]"
-                style={{
-                  width: 1050,
-                  height: 550,
-                  transform: `translate(-50%, -50%) scale(${topologyScale})`,
-                  transformOrigin: 'center center',
-                }}
-              >
-                <div className="absolute inset-0">
-                <svg className="absolute inset-0 z-[5] pointer-events-none drop-shadow-sm" width="1050" height="550" viewBox="0 0 1050 550">
-                  <defs>
-                    <marker id="arrow-indigo-live" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6366f1" />
-                    </marker>
-                  </defs>
-                  <path d="M 195 307.5 C 245 307.5, 245 325, 290 325" fill="none" stroke="#6366f1" strokeWidth="2.5" markerEnd="url(#arrow-indigo-live)" strokeLinecap="round" className="drop-shadow-sm animate-data-pulse" />
-                  <line x1="380" y1="510" x2="950" y2="510" stroke="#7dd3fc" strokeWidth="3" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="440" y1="270" x2="440" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
-                  <line x1="560" y1="270" x2="560" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
-                  <line x1="660" y1="270" x2="660" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
-                  <line x1="760" y1="270" x2="760" y2="510" stroke="#7dd3fc" strokeWidth="1.5" strokeDasharray="4 2" className="opacity-40" />
-
-                  <line x1="440" y1="440" x2="440" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="560" y1="440" x2="560" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="660" y1="440" x2="660" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="760" y1="440" x2="760" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="860" y1="440" x2="860" y2="510" stroke="#7dd3fc" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-
-                  <line x1="325" y1="340" x2="970" y2="340" stroke="#fda4af" strokeWidth="3" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="420" y1="270" x2="420" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="540" y1="270" x2="540" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="640" y1="270" x2="640" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="740" y1="270" x2="740" y2="340" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="420" y1="340" x2="420" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="540" y1="340" x2="540" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="640" y1="340" x2="640" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="740" y1="340" x2="740" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                  <line x1="840" y1="340" x2="840" y2="380" stroke="#fda4af" strokeWidth="2" strokeLinecap="round" className="animate-data-pulse" />
-                </svg>
-
-                <div className="absolute rounded-[24px] border border-slate-300/60 bg-white/10 shadow-[inset_0_2px_10px_rgba(0,0,0,0.02)] backdrop-blur-[2px] z-0 pointer-events-none" style={{ left: 280, top: 70, width: 730, height: 460 }}>
-                  <div className="relative z-20 flex justify-center pt-5">
-                    <span className="text-xl font-black tracking-[0.2em] text-slate-400 uppercase opacity-50">Agentic Core</span>
-                  </div>
-                </div>
-                <div className="absolute rounded-[20px] border border-dashed border-slate-300/80 bg-slate-400/5 z-0 pointer-events-none" style={{ left: 490, top: 140, width: 380, height: 160 }}>
-                  <div className="absolute right-4 top-2 text-[10px] font-bold uppercase tracking-widest text-slate-400/60">Service agents</div>
-                </div>
-
-                <div className="absolute z-0 w-[2px] rounded-full bg-indigo-200/50" style={{ left: 138.5, top: 110, height: 35 }}></div>
-                <div className="absolute z-20 flex cursor-default justify-center drop-shadow-xl transition-all hover:scale-110" style={{ left: 120, top: 55, width: 40, height: 60 }}>
-                  <svg width="40" height="60" viewBox="0 0 40 60">
-                    <circle cx="20" cy="18" r="12" fill="url(#userGradLive)" stroke="#4f46e5" strokeWidth="1.5" />
-                    <path d="M 8 50 C 8 42, 32 42, 32 50 L 32 55 L 8 55 Z" fill="#ffffff" stroke="#4f46e5" strokeWidth="1.5" strokeLinejoin="round" />
-                    <defs>
-                      <linearGradient id="userGradLive" x1="0%" y1="0%" x2="100%" y2="100%">
-                        <stop offset="0%" stopColor="#818cf8" />
-                        <stop offset="100%" stopColor="#4f46e5" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-
-                <div className={`absolute z-10 flex flex-col overflow-hidden rounded-[32px] border border-indigo-200/50 bg-white/60 shadow-xl backdrop-blur-md transition-all ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-400/20 scale-105' : ''}`} style={{ left: 70, top: 140, width: 140, height: 220 }}>
-                  <div className="flex w-full justify-center border-b border-indigo-100 bg-indigo-50/50 py-3">
-                    <span className="text-sm font-black tracking-[0.2em] text-indigo-900 uppercase">Terminal</span>
-                  </div>
-                </div>
-                <div className="absolute z-10 w-[2px] rounded-full bg-indigo-200/50 animate-pulse" style={{ left: 138.5, top: 235, height: 60 }}></div>
-                <div className={`absolute z-20 flex items-center justify-center rounded-2xl border border-indigo-400/50 bg-gradient-to-br from-indigo-500 to-blue-600 text-center text-[11px] font-bold uppercase tracking-tighter leading-tight text-white shadow-lg shadow-blue-500/20 transition-all hover:scale-110 ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-400/40' : ''}`} style={{ left: 85, top: 195, width: 110, height: 48 }}>
-                  OS/UE<br />Agent
-                </div>
-                <div className={`absolute z-20 flex items-center justify-center rounded-2xl border border-slate-200 bg-white/90 text-center text-[11px] font-bold uppercase tracking-tighter leading-tight text-slate-600 shadow-md backdrop-blur-sm transition-all hover:scale-110 ${activeNFs.has('UERANSIM_APP') ? 'ring-4 ring-indigo-200/40' : ''}`} style={{ left: 85, top: 285, width: 110, height: 48 }}>
-                  Modem/MT
-                </div>
-
-                <div className="absolute" style={{ left: 295, top: 290 }}>
-                  <TopologyEndpointNode label="SRF" active={activeNFs.has('SRF')} accent="pink" />
-                </div>
-                <div className="absolute" style={{ left: 970, top: 290 }}>
-                  <TopologyEndpointNode label="ARF" active={activeNFs.has('ARF')} accent="pink" onClick={() => setCanvasOverlay('arf')} />
-                </div>
-
-                <div className="absolute" style={{ left: 390, top: 175 }}>
-                  <TopologyAgentCard label="Sys-Agent" active={activeNFs.has('System_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
-                </div>
-                <div className="absolute" style={{ left: 510, top: 175 }}>
-                  <TopologyAgentCard label="Conn-Agent" active={activeNFs.has('Conn_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
-                </div>
-                <div className="absolute" style={{ left: 610, top: 175 }}>
-                  <TopologyAgentCard label="Comp-Agent" active={activeNFs.has('Compute_Agent')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
-                </div>
-                <div className="absolute" style={{ left: 710, top: 175 }}>
-                  <TopologyAgentCard label="Data-Agent" active={activeNFs.has('6G NWDAF')} skillLabel="Skills" onSkillClick={() => setCanvasOverlay('arf')} />
-                </div>
-
-                <div className="absolute" style={{ left: 395, top: 385 }}>
-                  <TopologyHostCard label="AM" active={activeNFs.has('6G AM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
-                </div>
-                <div className="absolute" style={{ left: 515, top: 385 }}>
-                  <TopologyHostCard label="SM" active={activeNFs.has('6G SM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
-                </div>
-                <div className="absolute" style={{ left: 615, top: 385 }}>
-                  <TopologyHostCard label="Policy" active={activeNFs.has('6G UDM')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
-                </div>
-                <div className="absolute" style={{ left: 715, top: 385 }}>
-                  <TopologyHostCard label="UP" active={activeNFs.has('6G NWDAF')} toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
-                </div>
-                <div className="absolute" style={{ left: 815, top: 385 }}>
-                  <TopologyHostCard label="DP" toolLabel="Tools" onToolsClick={() => setCanvasOverlay('trf')} />
-                </div>
-
-                <div className="absolute z-10 text-[13px] font-black tracking-[0.3em] text-rose-500/60 uppercase" style={{ left: 915, top: 320 }}>ABI</div>
-                <div className="absolute z-10 text-[13px] font-black tracking-[0.3em] text-sky-500/60 uppercase" style={{ left: 915, top: 490 }}>DBI</div>
-                </div>
-              </div>
-            </div>
+            {topologyCanvas}
           </div>
 
           {/* SBI TRACE LOG */}
@@ -1424,21 +1412,6 @@ export default function App() {
           <div className="flex-1 space-y-4 overflow-y-auto p-4">
             {rightTab === 'intent' && (
               <>
-                {selectorPlacement === 'intent' && (
-                  <div className="overflow-hidden rounded-lg border border-[#dbe3ef] bg-white">
-                    <div className="border-b border-[#dbe3ef] bg-[#eef3f9] px-3 py-2">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Target UE</span>
-                    </div>
-                    <div className="p-3">
-                      <UeSelectionList
-                        options={MOCK_UES}
-                        selectedUeId={selectedUeId}
-                        onSelect={handleSelectUe}
-                        variant="intent"
-                      />
-                    </div>
-                  </div>
-                )}
                 <div>
                    <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Natural Language Request</h3>
                    <div className="mb-2 rounded-lg border border-[#dbe3ef] bg-[#f8fafc] px-3 py-2">
@@ -1821,58 +1794,10 @@ function HeaderUeSelector({
       >
         {options.map((option) => (
           <option key={option.id} value={option.id}>
-            {option.label} · {option.data.supi}
+            {option.label} · {option.profile} · {option.data.supi}
           </option>
         ))}
       </select>
-    </div>
-  );
-}
-
-function UeSelectionList({
-  options,
-  selectedUeId,
-  onSelect,
-  variant = 'intent',
-}: {
-  options: MockUeOption[];
-  selectedUeId: string | null;
-  onSelect: (ueId: string) => void;
-  variant?: 'intent' | 'sidebar';
-}) {
-  const gapClass = variant === 'sidebar' ? 'space-y-1.5' : 'space-y-2';
-
-  return (
-    <div className={gapClass}>
-      {options.map((option) => {
-        const active = selectedUeId === option.id;
-        return (
-          <button
-            key={option.id}
-            onClick={() => onSelect(option.id)}
-            className={`w-full rounded-lg border px-3 py-2 text-left transition-all ${
-              active
-                ? 'border-[#8fb2ff] bg-[#f4f8ff] shadow-[0_4px_12px_rgba(95,140,255,0.12)]'
-                : 'border-[#e1e8f2] bg-[#fbfcfe] hover:border-[#c9d7ee]'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-[10px] font-semibold text-slate-700">{option.label}</div>
-                <div className="mt-0.5 font-mono text-[9px] text-slate-400">{option.data.supi}</div>
-              </div>
-              <span className={`rounded-full px-2 py-1 text-[8px] font-bold uppercase tracking-[0.1em] ${
-                active ? 'bg-[#dce7ff] text-[#4f76da]' : 'bg-white text-slate-400'
-              }`}>
-                {option.profile}
-              </span>
-            </div>
-            {variant === 'intent' && (
-              <div className="mt-2 text-[10px] leading-4 text-slate-500">{option.summary}</div>
-            )}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -1996,10 +1921,65 @@ function TabBtn({ active, icon, label, onClick }: any) {
   );
 }
 
-function TreeItem({ icon, label, active, hasChildren, isExpanded, onToggle, id }: any) {
+type TreeItemProps = {
+  icon?: ReactNode;
+  label: string;
+  active?: boolean;
+  hasChildren?: boolean;
+  isExpanded?: boolean;
+  onClick?: () => void;
+  onToggle?: (id: string) => void;
+  id?: string;
+  count?: number;
+  rightBadge?: string;
+  status?: 'healthy' | 'muted';
+  variant?: 'legacy' | 'explorer';
+  level?: number;
+};
+
+function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onToggle, id, count, rightBadge, status, variant = 'legacy' }: TreeItemProps) {
+  if (variant === 'explorer') {
+    const statusClass = status === 'muted' ? 'bg-slate-300' : 'bg-[#22c55e]';
+    const isInteractive = Boolean(hasChildren || onClick);
+
+    return (
+      <div
+        onClick={() => {
+          if (hasChildren && onToggle && id) {
+            onToggle(id);
+            return;
+          }
+          onClick?.();
+        }}
+        className={`group flex items-center gap-1.5 rounded-md px-1.5 text-[11px] transition-all ${
+          isInteractive ? 'cursor-pointer' : 'cursor-default'
+        } ${hasChildren ? 'h-8' : 'h-7'} ${active ? 'bg-[#eaf1ff] text-[#315ee8]' : 'text-[#31415f] hover:bg-[#f2f6fc]'}`}
+      >
+        <div className="flex w-3 shrink-0 justify-center text-[#0f2a44]">
+          {hasChildren && (isExpanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>)}
+        </div>
+        <span className={active ? 'text-[#315ee8]' : 'text-[#7183a3]'}>{icon}</span>
+        <span className={`min-w-0 flex-1 truncate ${hasChildren ? 'font-semibold' : 'font-medium'}`}>{label}</span>
+        {typeof count === 'number' && (
+          <span className="min-w-6 rounded-full border border-[#1d4ed8]/35 bg-[#dbeafe] px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold leading-none text-[#0f172a]">
+            {count}
+          </span>
+        )}
+        {rightBadge && (
+          <span className="rounded-[4px] border border-[#1d4ed8]/35 bg-[#dbeafe] px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-[#0f172a]">
+            {rightBadge}
+          </span>
+        )}
+        {!hasChildren && status && (
+          <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusClass}`}></span>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div 
-      onClick={() => hasChildren && onToggle && onToggle(id)}
+      onClick={() => hasChildren && onToggle && id && onToggle(id)}
       className={`flex cursor-pointer items-center gap-2 rounded px-2 py-1 transition-colors ${active ? 'bg-[#dbe7fb] text-[#2f67f6]' : 'text-slate-500 hover:bg-[#edf2f8]'}`}
     >
       <div className="w-3 text-slate-300">
