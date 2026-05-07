@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import {
   Activity, Server, Database, Network,
-  Play, CheckCircle, Clock, Search, 
+  Play, CheckCircle, Search, 
   SlidersHorizontal, ChevronRight, ChevronDown, 
   Loader2, Zap, BrainCircuit, Smartphone, ArrowRight,
   Library, FileJson, Bot, Radio, MapPin, Signal,
@@ -773,12 +773,20 @@ export default function App() {
   ]);
 
   const [kpis, setKpis] = useState({ pdu: 7, cpLoad: 56, latency: 34.9 });
+  const [now, setNow] = useState(() => new Date());
   const selectedUe = MOCK_UES.find((ue) => ue.id === selectedUeId) || null;
   const isTopologyDebugPath = typeof window !== 'undefined' && window.location.pathname === TOPOLOGY_DEBUG_PATH;
+  const currentTime = now.toLocaleTimeString([], { hour12: false });
+  const currentDate = now.toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' });
 
   useEffect(() => {
     localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sessionHistory));
   }, [sessionHistory]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -983,7 +991,7 @@ export default function App() {
       `}</style>
       <div ref={topologyViewportRef} className="relative flex flex-1 overflow-hidden rounded-[30px]">
         <div
-          className="absolute left-1/2 top-1/2 overflow-hidden rounded-[30px] border border-slate-200/60 bg-slate-50 topology-grid shadow-[0_22px_48px_rgba(148,163,184,0.18),inset_0_1px_0_rgba(255,255,255,0.9)]"
+          className="topology-frame absolute left-1/2 top-1/2 overflow-hidden rounded-[30px] border topology-grid"
           style={{
             width: 1050,
             height: 550,
@@ -1104,8 +1112,8 @@ export default function App() {
 
   if (isTopologyDebugPath) {
     return (
-      <div className="h-screen overflow-hidden bg-[#edf2f7] p-4">
-        <div className="flex h-full flex-col rounded-[28px] border border-[#d9e1ee] bg-white p-4 shadow-[0_20px_55px_rgba(30,41,59,0.12)]">
+      <div className="dashboard-root p-4">
+        <div className="topology-debug-shell">
           {topologyCanvas}
         </div>
       </div>
@@ -1113,17 +1121,17 @@ export default function App() {
   }
 
   return (
-    <div className="h-screen bg-[#edf2f7] p-1.5 text-[11px] text-slate-700 overflow-hidden">
-      <div className="relative flex h-full flex-col overflow-hidden rounded-[18px] border border-[#d9e1ee] bg-white shadow-[0_8px_28px_rgba(30,41,59,0.08)]">
+    <div className="dashboard-root">
+      <div className="dashboard-shell">
       
       {/* TOOL DEFINITION MODAL OVERLAY */}
       {selectedTool && (
-        <div className="absolute inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200">
-          <div className="bg-white rounded-lg shadow-2xl w-[500px] border border-slate-200 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="bg-slate-50 px-4 py-3 border-b border-slate-200 flex justify-between items-center">
+        <div className="modal-backdrop absolute inset-0 z-50 flex items-center justify-center animate-in fade-in duration-200">
+          <div className="modal-card flex w-[500px] flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="modal-header flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <Code size={16} className="text-purple-600" />
-                <h3 className="font-bold text-slate-800 uppercase tracking-wide">Tool Definition Template</h3>
+                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-800">Tool Definition Template</h3>
               </div>
               <button onClick={() => setSelectedTool(null)} className="text-slate-400 hover:text-slate-700 transition-colors">
                 <X size={18} />
@@ -1133,18 +1141,18 @@ export default function App() {
               <div className="flex justify-between items-start">
                 <div>
                   <h4 className="text-xs font-bold text-slate-400 uppercase mb-1">Tool Name</h4>
-                  <p className="font-mono text-base font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-100 inline-block">{selectedTool}</p>
+                  <p className="status-pill info font-mono">{selectedTool}</p>
                 </div>
                 <div className="text-right">
                   <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1">Target Host NF</h4>
-                  <span className="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-2 py-1 rounded border border-emerald-200">
+                  <span className="status-pill success">
                     {TOOL_DEFINITIONS[selectedTool]?.host || "Unknown"}
                   </span>
                 </div>
               </div>
               <div>
                 <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><FileJson size={12}/> Description</h4>
-                <p className="text-sm text-slate-700 leading-relaxed bg-slate-50 p-2 rounded border border-slate-100">
+                <p className="metric-tile p-2 text-sm leading-relaxed text-slate-700">
                   {TOOL_DEFINITIONS[selectedTool]?.desc || "No description available."}
                 </p>
               </div>
@@ -1168,9 +1176,9 @@ export default function App() {
       )}
 
       {canvasOverlay === 'trf' && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/35 backdrop-blur-sm">
-          <div className="flex w-[620px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="modal-backdrop absolute inset-0 z-40 flex items-center justify-center">
+          <div className="modal-card flex w-[620px] max-w-[92vw] flex-col overflow-hidden">
+            <div className="modal-header flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <Library size={16} className="text-purple-600" />
                 <div>
@@ -1184,7 +1192,7 @@ export default function App() {
             </div>
             <div className="grid gap-4 p-4 sm:grid-cols-2">
               {TRF_TOOL_GROUPS.map((group) => (
-                <div key={group.label} className="rounded-xl border border-[#e1e8f2] bg-[#fbfcfe] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+                <div key={group.label} className="soft-card p-4">
                   <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-500">{group.label}</div>
                   <div className="flex flex-wrap gap-2">
                     {group.tools.map((tool) => (
@@ -1206,9 +1214,9 @@ export default function App() {
       )}
 
       {canvasOverlay === 'arf' && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/35 backdrop-blur-sm">
-          <div className="flex w-[520px] max-w-[92vw] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="modal-backdrop absolute inset-0 z-40 flex items-center justify-center">
+          <div className="modal-card flex w-[520px] max-w-[92vw] flex-col overflow-hidden">
+            <div className="modal-header flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
                 <Search size={16} className="text-purple-600" />
                 <div>
@@ -1232,161 +1240,174 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <header className="flex h-11 shrink-0 items-center border-b border-slate-800/50 bg-[#111a2f] px-4 text-white">
-        <div className="flex min-w-0 flex-1 items-center justify-start">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-[#2f67f6]">
-              <Network size={14} className="text-white"/>
-            </div>
-            <span className="text-[11px] font-semibold tracking-[0.24em] text-white">6G AGENTIC CORE <span className="ml-1 text-[10px] font-medium tracking-[0.12em] text-slate-400">SA2 Prototype</span></span>
+      <header className="app-header px-5">
+        <div className="brand-lockup">
+          <div className="brand-mark flex items-center justify-center">
+            <Network size={24} />
+          </div>
+          <div>
+            <div className="brand-title">Agentic Core</div>
+            <div className="brand-subtitle">Command Center</div>
           </div>
         </div>
-        <div className="ml-6 flex items-center justify-end gap-6">
-          <div className="flex gap-8 border-l border-slate-700 pl-8">
-            <KpiBlock label="ACTIVE PDU SESSIONS" value={kpis.pdu} trend="up" />
-            <KpiBlock label="AGENTIC CP LOAD" value={`${kpis.cpLoad}%`} trend="up" />
-            <KpiBlock label="AVG SBI LATENCY" value={`${kpis.latency.toFixed(1)}ms`} trend="down" />
+        <div className="header-tools">
+          <div className="text-right">
+            <div className="header-clock">{currentTime}</div>
+            <div className="mt-0.5 text-[10px] font-medium text-slate-400">{currentDate}</div>
           </div>
           <HeaderUeSelector selectedUe={selectedUe} options={MOCK_UES} onSelect={handleSelectUe} />
-          <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
-            <Clock size={14} /> <span>11:47:27 UTC</span>
-          </div>
+          <button className="header-icon-btn" type="button" aria-label="Search"><Search size={15} /></button>
+          <button className="header-icon-btn" type="button" aria-label="Settings"><SlidersHorizontal size={15} /></button>
         </div>
       </header>
 
       {/* MAIN CONTAINER */}
-      <div className="flex flex-1 overflow-hidden bg-[#f8fafc]">
+      <div className="dashboard-main">
+        <div className="command-rail">
+          <div className="rail-stack">
+            <button className="rail-btn active" type="button" aria-label="Dashboard"><Network size={17} /></button>
+            <button className="rail-btn" type="button" aria-label="Topology"><Activity size={17} /></button>
+            <button className="rail-btn" type="button" aria-label="Functions"><Database size={17} /></button>
+            <button className="rail-btn" type="button" aria-label="Infrastructure"><HardDrive size={17} /></button>
+            <button className="rail-btn" type="button" aria-label="Settings"><SlidersHorizontal size={17} /></button>
+          </div>
+          <button className="rail-btn" type="button" aria-label="Operator">OP</button>
+        </div>
         
         {/* SIDEBAR */}
-        <div className="flex w-[256px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-[#dbe3ef] bg-[#f6f8fb]">
-          <div className="border-b border-[#c8edff] bg-gradient-to-r from-[#e9fbff] via-[#f4fcff] to-[#eef6ff] px-2 py-2 shadow-[inset_0_-1px_0_rgba(56,189,248,0.18)]">
-            <div className="flex items-center gap-2">
-              <span className="h-4 w-1 rounded-full bg-[#38bdf8] shadow-[0_0_12px_rgba(56,189,248,0.75)]"></span>
-              <h2 className="text-[11px] font-black uppercase tracking-[0.18em] text-[#0f2a44]">
-                Topology Explorer
-              </h2>
-            </div>
+        <div className="sidebar-panel">
+          <div className="sidebar-section-header">
+            <span>Active Context</span>
+            <span className="status-pill success">Live</span>
           </div>
-          <div className="px-2 py-3">
-            <div className="rounded-xl border border-[#dbe3ef] bg-white p-1 shadow-[0_4px_12px_rgba(148,163,184,0.10)]">
-              <div className="space-y-0.5">
-                <TreeItem variant="explorer" id="explorer-ue" label="UE" icon={<Smartphone size={16} className="text-[#0f766e]" />} hasChildren isExpanded={expandedFolders.has('explorer-ue')} onToggle={toggleFolder} count={12} />
-                {expandedFolders.has('explorer-ue') && (
-                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
-                    <TreeItem variant="explorer" label="UE-07" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="UE-08" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="UE-03" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="Others" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
-                  </div>
-                )}
+          <div className="sidebar-card p-2">
+            <div className="space-y-0.5">
+              <TreeItem variant="explorer" id="explorer-ue" label="UE" icon={<Smartphone size={16} className="text-[#0f766e]" />} hasChildren isExpanded={expandedFolders.has('explorer-ue')} onToggle={toggleFolder} count={12} />
+              {expandedFolders.has('explorer-ue') && (
+                <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                  <TreeItem variant="explorer" label="UE-07" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="UE-08" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="UE-03" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="Others" icon={<Smartphone size={14} className="text-[#0f766e]" />} status="healthy" level={1} />
+                </div>
+              )}
 
-                <TreeItem variant="explorer" id="explorer-agents" label="Agents" icon={<Bot size={16} className="text-[#1d4ed8]" />} hasChildren isExpanded={expandedFolders.has('explorer-agents')} onToggle={toggleFolder} count={3} />
-                {expandedFolders.has('explorer-agents') && (
-                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
-                    <TreeItem variant="explorer" label="System_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="Conn_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="Compute_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
-                  </div>
-                )}
+              <TreeItem variant="explorer" id="explorer-agents" label="Agents" icon={<Bot size={16} className="text-[#1d4ed8]" />} hasChildren isExpanded={expandedFolders.has('explorer-agents')} onToggle={toggleFolder} count={3} />
+              {expandedFolders.has('explorer-agents') && (
+                <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                  <TreeItem variant="explorer" label="System_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="Conn_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="Compute_Agent" icon={<Bot size={14} className="text-[#1d4ed8]" />} status="healthy" level={1} />
+                </div>
+              )}
 
-                <TreeItem variant="explorer" id="explorer-network-functions" label="Network Functions" icon={<Database size={16} className="text-[#0369a1]" />} hasChildren isExpanded={expandedFolders.has('explorer-network-functions')} onToggle={toggleFolder} count={5} />
-                {expandedFolders.has('explorer-network-functions') && (
-                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
-                    <TreeItem variant="explorer" label="AM" icon={<Radio size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="SM" icon={<SlidersHorizontal size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="Policy" icon={<FileJson size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="UP" icon={<Activity size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
-                    <TreeItem variant="explorer" label="DP" icon={<Database size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
-                  </div>
-                )}
+              <TreeItem variant="explorer" id="explorer-network-functions" label="Network Functions" icon={<Database size={16} className="text-[#0369a1]" />} hasChildren isExpanded={expandedFolders.has('explorer-network-functions')} onToggle={toggleFolder} count={5} />
+              {expandedFolders.has('explorer-network-functions') && (
+                <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                  <TreeItem variant="explorer" label="AM" icon={<Radio size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="SM" icon={<SlidersHorizontal size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="Policy" icon={<FileJson size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="UP" icon={<Activity size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                  <TreeItem variant="explorer" label="DP" icon={<Database size={14} className="text-[#0369a1]" />} status="healthy" level={1} />
+                </div>
+              )}
 
-                <TreeItem variant="explorer" id="explorer-skills" label="Skills" icon={<BrainCircuit size={16} className="text-[#5b21b6]" />} hasChildren isExpanded={expandedFolders.has('explorer-skills')} onToggle={toggleFolder} count={ARF_SKILLS.length} />
-                {expandedFolders.has('explorer-skills') && (
-                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
-                    {ARF_SKILLS.map((skill) => (
-                      <TreeItem key={skill} variant="explorer" label={skill} icon={<BrainCircuit size={14} className="text-[#5b21b6]" />} rightBadge="ARF" level={1} />
-                    ))}
-                  </div>
-                )}
+              <TreeItem variant="explorer" id="explorer-skills" label="Skills" icon={<BrainCircuit size={16} className="text-[#5b21b6]" />} hasChildren isExpanded={expandedFolders.has('explorer-skills')} onToggle={toggleFolder} count={ARF_SKILLS.length} />
+              {expandedFolders.has('explorer-skills') && (
+                <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                  {ARF_SKILLS.map((skill) => (
+                    <TreeItem key={skill} variant="explorer" label={skill} icon={<BrainCircuit size={14} className="text-[#5b21b6]" />} rightBadge="ARF" level={1} />
+                  ))}
+                </div>
+              )}
 
-                <TreeItem variant="explorer" id="explorer-tools" label="Tools" icon={<Code size={16} className="text-[#0f172a]" />} hasChildren isExpanded={expandedFolders.has('explorer-tools')} onToggle={toggleFolder} count={TRF_TOOL_GROUPS.reduce((sum, group) => sum + group.tools.length, 0)} />
-                {expandedFolders.has('explorer-tools') && (
-                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
-                    {TRF_TOOL_GROUPS.flatMap((group) => group.tools).map((tool) => (
-                      <TreeItem
-                        key={tool}
-                        variant="explorer"
-                        label={tool}
-                        icon={<Code size={14} className="text-[#0f172a]" />}
-                        rightBadge={getToolHostTag(tool)}
-                        onClick={() => setSelectedTool(tool)}
-                        level={1}
-                      />
-                    ))}
-                  </div>
-                )}
+              <TreeItem variant="explorer" id="explorer-tools" label="Tools" icon={<Code size={16} className="text-[#0f172a]" />} hasChildren isExpanded={expandedFolders.has('explorer-tools')} onToggle={toggleFolder} count={TRF_TOOL_GROUPS.reduce((sum, group) => sum + group.tools.length, 0)} />
+              {expandedFolders.has('explorer-tools') && (
+                <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                  {TRF_TOOL_GROUPS.flatMap((group) => group.tools).map((tool) => (
+                    <TreeItem
+                      key={tool}
+                      variant="explorer"
+                      label={tool}
+                      icon={<Code size={14} className="text-[#0f172a]" />}
+                      rightBadge={getToolHostTag(tool)}
+                      onClick={() => setSelectedTool(tool)}
+                      level={1}
+                    />
+                  ))}
+                </div>
+              )}
 
-                <TreeItem variant="explorer" id="explorer-infra" label="Infra" icon={<HardDrive size={16} className="text-[#334155]" />} hasChildren isExpanded={expandedFolders.has('explorer-infra')} onToggle={toggleFolder} count={5} />
-                {expandedFolders.has('explorer-infra') && (
-                  <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
-                    <TreeItem variant="explorer" label="AI Runtime" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
-                    <TreeItem variant="explorer" label="Core Cluster" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
-                    <TreeItem variant="explorer" label="RAN Sim" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
-                    <TreeItem variant="explorer" label="Trace Store" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
-                    <TreeItem variant="explorer" label="Telemetry" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
-                  </div>
-                )}
-              </div>
+              <TreeItem variant="explorer" id="explorer-infra" label="Infra" icon={<HardDrive size={16} className="text-[#334155]" />} hasChildren isExpanded={expandedFolders.has('explorer-infra')} onToggle={toggleFolder} count={5} />
+              {expandedFolders.has('explorer-infra') && (
+                <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
+                  <TreeItem variant="explorer" label="AI Runtime" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                  <TreeItem variant="explorer" label="Core Cluster" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                  <TreeItem variant="explorer" label="RAN Sim" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                  <TreeItem variant="explorer" label="Trace Store" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                  <TreeItem variant="explorer" label="Telemetry" icon={<HardDrive size={14} className="text-[#334155]" />} level={1} />
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {/* CENTER AREA */}
-        <div className="flex flex-1 flex-col bg-white">
+        <div className="workspace flex flex-col">
           
           {/* TOPOLOGY VIEW */}
-          <div className="flex h-[60%] flex-col overflow-hidden border-b border-[#dbe3ef] bg-white px-4 pt-3">
-            <div className="mb-3 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#91a4c2]">
-              <Activity size={14}/> Active Network Architecture Topology
+          <div className="workspace-section flex h-[60%] flex-col overflow-hidden px-5 pt-4">
+            <div className="section-toolbar">
+              <div className="section-title">
+                <Activity size={15} className="text-[#2f73ff]" /> Active Network Architecture Topology
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="status-pill info">Active Trace</span>
+                <span className="status-pill success">Healthy</span>
+                <span className="topology-tools">
+                  <button type="button">Legend</button>
+                  <button type="button">Fit</button>
+                </span>
+              </div>
             </div>
             {topologyCanvas}
           </div>
 
           {/* SBI TRACE LOG */}
           <div className="flex flex-1 flex-col overflow-hidden">
-            <div className="flex items-center justify-between border-b border-[#dbe3ef] bg-[#eef3f9] px-4 py-2">
-              <div className="flex items-center gap-2 font-bold text-slate-600">
+            <div className="trace-panel-header flex items-center justify-between px-5 py-2.5">
+              <div className="flex items-center gap-2 font-bold text-slate-700">
                 <ChevronRight size={14}/> Service Based Interface (SBI) Trace Log
               </div>
               {isPlaying && <div className="flex items-center gap-1.5 text-blue-600 font-bold text-[10px] animate-pulse"><Loader2 size={12} className="animate-spin"/> PROCESSING...</div>}
             </div>
             <div className="flex-1 overflow-auto bg-white">
-              <table className="w-full text-left font-mono text-[10px]">
-                <thead className="sticky top-0 bg-[#f3f6fb] uppercase tracking-wider text-slate-500">
+              <table className="trace-table w-full text-left font-mono text-[10px]">
+                <thead className="sticky top-0 uppercase">
                   <tr>
-                    <th className="border-b border-[#dbe3ef] px-3 py-2">TIME</th>
-                    <th className="border-b border-[#dbe3ef] px-3 py-2">SRC NF</th>
-                    <th className="border-b border-[#dbe3ef] px-3 py-2">DEST NF</th>
-                    <th className="border-b border-[#dbe3ef] px-3 py-2">SBI OPERATION</th>
-                    <th className="border-b border-[#dbe3ef] px-3 py-2">STATUS</th>
-                    <th className="border-b border-[#dbe3ef] px-3 py-2">PAYLOAD EXCERPT</th>
+                    <th>TIME</th>
+                    <th>SRC NF</th>
+                    <th>DEST NF</th>
+                    <th>SBI OPERATION</th>
+                    <th>STATUS</th>
+                    <th>PAYLOAD EXCERPT</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#edf2f8]">
                   {traceData.map((t, i) => (
                     <tr key={i} className={`transition-colors hover:bg-[#f8fbff] ${i === 2 ? 'bg-[#f7f0ff]' : ''}`}>
-                      <td className="px-3 py-2 text-slate-400">{t.time}</td>
-                      <td className="px-3 py-2 font-bold text-slate-600">{t.src}</td>
-                      <td className="px-3 py-2 font-bold text-slate-600">{t.dest}</td>
-                      <td className="px-3 py-2 font-bold text-[#5478db]">{t.op}</td>
-                      <td className="px-3 py-2">
-                        <span className={`rounded px-2 py-0.5 text-[9px] font-bold ${
-                          t.status === '200 OK' || t.status === '201 Created' || t.status === 'Success' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                      <td className="text-slate-400">{t.time}</td>
+                      <td className="font-bold text-slate-700">{t.src}</td>
+                      <td className="font-bold text-slate-700">{t.dest}</td>
+                      <td className="font-bold text-[#2f73ff]">{t.op}</td>
+                      <td>
+                        <span className={`status-pill ${
+                          t.status === '200 OK' || t.status === '201 Created' || t.status === 'Success' ? 'success' : 'danger'
                         }`}>
                           {t.status}
                         </span>
                       </td>
-                      <td className="max-w-[420px] truncate px-3 py-2 text-slate-400">{t.payload}</td>
+                      <td className="max-w-[420px] truncate text-slate-400">{t.payload}</td>
                     </tr>
                   ))}
                   {traceData.length === 0 && (
@@ -1399,8 +1420,15 @@ export default function App() {
         </div>
 
         {/* RIGHT PANEL */}
-        <div className="flex w-[300px] shrink-0 flex-col border-l border-[#dbe3ef] bg-white">
-          <div className="grid grid-cols-3 border-b border-[#dbe3ef] bg-[#fafcff]">
+        <div className="right-panel flex flex-col">
+          <div className="right-panel-header">
+            <div>
+              <div className="text-[12px] font-extrabold text-slate-800">Outputs & Effects</div>
+              <div className="mt-0.5 text-[10px] font-medium text-slate-400">Live orchestration controls</div>
+            </div>
+            <span className="status-pill success">Live</span>
+          </div>
+          <div className="right-tabs">
             <TabBtn active={rightTab === 'intent'} icon={<Zap size={14}/>} label="INTENT" onClick={() => setRightTab('intent')} />
             <TabBtn active={rightTab === 'log'} icon={<Activity size={14}/>} label="REACT LOG" onClick={() => setRightTab('log')} />
             <TabBtn active={rightTab === 'ue'} icon={<Smartphone size={14}/>} label="UE STATE" onClick={() => setRightTab('ue')} />
@@ -1409,12 +1437,12 @@ export default function App() {
             <TabBtn active={rightTab === 'sessions'} icon={<Library size={14}/>} label="TRACE SESSIONS" onClick={() => setRightTab('sessions')} />
           </div>
 
-          <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <div className="panel-scroll space-y-4">
             {rightTab === 'intent' && (
               <>
                 <div>
-                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-400">Natural Language Request</h3>
-                   <div className="mb-2 rounded-lg border border-[#dbe3ef] bg-[#f8fafc] px-3 py-2">
+                   <h3 className="mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Natural Language Request</h3>
+                   <div className="soft-card mb-2 px-3 py-2">
                      <div className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Active Target UE</div>
                      {selectedUe ? (
                        <div className="mt-1 flex items-center justify-between gap-2">
@@ -1422,14 +1450,14 @@ export default function App() {
                            <div className="text-[10px] font-semibold text-slate-700">{selectedUe.label}</div>
                            <div className="font-mono text-[10px] text-slate-400">{selectedUe.data.supi}</div>
                          </div>
-                         <span className="rounded-full bg-[#eef3ff] px-2 py-1 text-[9px] font-bold text-[#4f76da]">{selectedUe.profile}</span>
+                         <span className="status-pill info">{selectedUe.profile}</span>
                        </div>
                      ) : (
                        <div className="mt-1 text-[10px] text-slate-400">Choose a UE target before executing an intent.</div>
                      )}
                    </div>
                    <textarea 
-                     className="h-20 w-full resize-none rounded border border-[#d7dfeb] bg-[#f8fafc] p-3 font-mono text-[10px] leading-4 text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                     className="h-20 w-full resize-none rounded-lg border border-[#d7dfeb] bg-white p-3 font-mono text-[10px] leading-4 text-slate-600 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)] focus:outline-none focus:ring-2 focus:ring-blue-100"
                      value={inputText} onChange={(e) => setInputText(e.target.value)}
                      placeholder="Type intent here..."
                    />
@@ -1437,11 +1465,11 @@ export default function App() {
                      <div className="mt-2 text-[10px] font-medium text-amber-600">Select a UE target first to enable execution.</div>
                    )}
                    <div className="mt-2 flex gap-2">
-                     <button onClick={handleSuggest} className="flex-1 rounded border border-[#d6deea] bg-white py-1.5 font-bold text-slate-600 hover:bg-slate-50">SUGGEST</button>
-                     <button onClick={processIntent} disabled={isProcessing || !selectedUe} className="flex-[2] rounded bg-[#2f67f6] py-1.5 font-bold text-white shadow-sm transition-all hover:bg-[#2558db] active:scale-95 flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:bg-[#a5b8e6]">
+                     <button onClick={handleSuggest} className="action-secondary flex-1">SUGGEST</button>
+                     <button onClick={processIntent} disabled={isProcessing || !selectedUe} className="action-primary flex-[2] disabled:cursor-not-allowed disabled:opacity-60">
                         {isProcessing ? <Loader2 size={14} className="animate-spin"/> : <Play size={12} fill="currentColor"/>} EXECUTE
                      </button>
-                     <button onClick={handleReplay} disabled={isProcessing || isPlaying} className="rounded bg-[#9b34f3] px-3 text-white hover:bg-[#8522db] shadow-sm flex items-center gap-1.5 font-bold disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={12}/> REPLAY</button>
+                     <button onClick={handleReplay} disabled={isProcessing || isPlaying} className="action-purple disabled:cursor-not-allowed disabled:opacity-60"><RotateCcw size={12}/> REPLAY</button>
                    </div>
                    <div className="mt-3 flex items-center gap-2">
                      <input type="checkbox" checked={slowMode} onChange={e => setSlowMode(e.target.checked)} className="accent-blue-600" id="slow"/>
@@ -1449,8 +1477,8 @@ export default function App() {
                    </div>
                 </div>
 
-                <div className="overflow-hidden rounded-lg border border-[#dbe3ef] bg-white">
-                  <div className="flex items-center justify-between border-b border-[#dbe3ef] bg-[#eef3f9] px-3 py-2">
+                <div className="soft-card overflow-hidden">
+                  <div className="soft-card-header flex items-center justify-between px-3 py-2">
                     <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-600">Semi-Structured Intent</span>
                     {intentData && <CheckCircle size={14} className="text-emerald-500"/>}
                   </div>
@@ -1767,6 +1795,30 @@ export default function App() {
         </div>
 
       </div>
+      <div className="bottom-status">
+        <div className="bottom-status-metrics">
+          <span className="bottom-metric"><span className="status-dot"></span><span>Network</span><strong>Healthy</strong></span>
+          <span className="bottom-metric"><span>Active PDU</span><strong>{kpis.pdu}</strong></span>
+          <span className="bottom-metric"><span>CP Load</span><strong>{kpis.cpLoad}%</strong></span>
+          <span className="bottom-metric"><span>SBI Latency</span><strong>{kpis.latency.toFixed(1)}ms</strong></span>
+        </div>
+        <div>
+          <span className="font-bold text-slate-600">Active Alarms</span>
+          <span className="status-pill danger">0 Critical</span>
+          <span className="status-pill info">4 Minor</span>
+        </div>
+        <div>
+          <span className="font-bold text-slate-600">System Load</span>
+          <svg className="tiny-sparkline" viewBox="0 0 76 16" aria-hidden="true">
+            <polyline fill="none" stroke="#2fb277" strokeWidth="1.5" points="0,12 10,11 18,8 26,9 34,6 42,10 50,5 60,4 76,3" />
+          </svg>
+          <span className="font-mono font-bold text-slate-700">{kpis.cpLoad}%</span>
+        </div>
+        <div>
+          <span className="font-bold text-slate-600">Region</span>
+          <span className="flex items-center gap-1 font-mono text-slate-700"><span className="h-1.5 w-1.5 rounded-full bg-[#2fb277]"></span> us-central</span>
+        </div>
+      </div>
       </div>
     </div>
   );
@@ -1782,15 +1834,14 @@ function HeaderUeSelector({
   onSelect: (ueId: string) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-slate-700/90 bg-slate-900/25 px-3 py-1.5">
+    <div className="ue-selector">
       <div>
-        <div className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-500">Active UE</div>
-        <div className="text-[10px] font-semibold text-white">{selectedUe?.label || 'Unassigned'}</div>
+        <div className="ue-selector-label">Active UE</div>
+        <div className="ue-selector-value">{selectedUe?.label || 'Unassigned'}</div>
       </div>
       <select
         value={selectedUe?.id || ''}
         onChange={(event) => onSelect(event.target.value)}
-        className="rounded border border-slate-600 bg-[#10182c] px-2 py-1 text-[10px] font-medium text-slate-200 focus:outline-none"
       >
         {options.map((option) => (
           <option key={option.id} value={option.id}>
@@ -1802,22 +1853,9 @@ function HeaderUeSelector({
   );
 }
 
-function KpiBlock({ label, value, trend }: any) {
-  return (
-    <div className="flex flex-col items-center">
-      <span className="text-[8px] font-bold uppercase tracking-[0.16em] text-slate-400">{label}</span>
-      <div className="flex items-center gap-1.5">
-        <span className="font-mono text-[12px] font-bold tracking-tight text-white">{value}</span>
-        {trend === 'up' && <ArrowRight size={11} className="text-emerald-400 -rotate-45" />}
-        {trend === 'down' && <ArrowRight size={11} className="text-emerald-400 -rotate-45" />}
-      </div>
-    </div>
-  );
-}
-
 function PolicyField({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+    <div className="metric-tile px-3 py-2">
       <div className="mb-1 text-[9px] font-bold tracking-[0.04em] text-slate-400">{label}</div>
       <div className="break-all font-mono text-[10px] font-semibold text-slate-700">{value}</div>
     </div>
@@ -1826,7 +1864,7 @@ function PolicyField({ label, value }: { label: string; value: string | number }
 
 function MetricStat({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div className="rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+    <div className="metric-tile px-3 py-2">
       <div className="mb-1 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400">{label}</div>
       <div className={`font-mono text-[10px] font-semibold ${accent}`}>{value}</div>
     </div>
@@ -1853,7 +1891,7 @@ function MetricLineChart({ samples }: { samples: Array<{ label: string; dl: numb
   const gridValues = [0.25, 0.5, 0.75];
 
   return (
-    <div className="rounded-lg border border-[#edf2f7] bg-[#fbfcfe] px-3 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
+    <div className="metric-tile px-3 py-3">
       <div className="mb-3 flex items-center gap-3 text-[9px] font-bold uppercase tracking-[0.08em] text-slate-400">
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#31a6f6]"></span>DL Bandwidth</span>
         <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-[#ab5cf6]"></span>UL Bandwidth</span>
@@ -1912,7 +1950,7 @@ function MetricLineChart({ samples }: { samples: Array<{ label: string; dl: numb
 
 function TabBtn({ active, icon, label, onClick }: any) {
   return (
-    <button onClick={onClick} className={`flex-1 border-b px-1 py-2 transition-all ${active ? 'border-[#5f8cff] bg-white text-[#4f76da]' : 'border-transparent text-slate-400 hover:bg-white'}`}>
+    <button onClick={onClick} className={`tab-btn ${active ? 'active' : ''}`}>
       <div className="flex flex-col items-center gap-1">
         {icon}
         <span className="text-[9px] font-bold tracking-[0.12em]">{label}</span>
@@ -1951,7 +1989,7 @@ function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onTog
           }
           onClick?.();
         }}
-        className={`group flex items-center gap-1.5 rounded-md px-1.5 text-[11px] transition-all ${
+        className={`tree-item group flex items-center gap-1.5 rounded-md px-1.5 text-[11px] transition-all ${
           isInteractive ? 'cursor-pointer' : 'cursor-default'
         } ${hasChildren ? 'h-8' : 'h-7'} ${active ? 'bg-[#eaf1ff] text-[#315ee8]' : 'text-[#31415f] hover:bg-[#f2f6fc]'}`}
       >
@@ -1961,12 +1999,12 @@ function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onTog
         <span className={active ? 'text-[#315ee8]' : 'text-[#7183a3]'}>{icon}</span>
         <span className={`min-w-0 flex-1 truncate ${hasChildren ? 'font-semibold' : 'font-medium'}`}>{label}</span>
         {typeof count === 'number' && (
-          <span className="min-w-6 rounded-full border border-[#1d4ed8]/35 bg-[#dbeafe] px-1.5 py-0.5 text-center font-mono text-[10px] font-semibold leading-none text-[#0f172a]">
+          <span className="tree-badge px-1.5 py-0.5">
             {count}
           </span>
         )}
         {rightBadge && (
-          <span className="rounded-[4px] border border-[#1d4ed8]/35 bg-[#dbeafe] px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none text-[#0f172a]">
+          <span className="tree-badge px-1.5 py-0.5">
             {rightBadge}
           </span>
         )}
@@ -1993,7 +2031,7 @@ function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onTog
 
 function ToolBadge({ label, onClick }: any) {
   return (
-    <span onClick={onClick} className="cursor-pointer rounded-[4px] border border-[#dbe3ef] bg-white px-2 py-1 text-[8px] font-bold text-slate-500 shadow-[0_1px_2px_rgba(148,163,184,0.08)] transition-all hover:border-[#a7b9da]">{label}</span>
+    <span onClick={onClick} className="status-pill info cursor-pointer">{label}</span>
   );
 }
 
@@ -2009,8 +2047,8 @@ function StackedTag({
   positionClass?: string;
 }) {
   const themeMap = {
-    blue: 'from-sky-500 to-blue-600 shadow-blue-200/50',
-    fuchsia: 'from-fuchsia-500 to-purple-600 shadow-purple-200/50',
+    blue: 'border-[#bcd4ff] bg-[#eaf2ff] text-[#2f73ff]',
+    fuchsia: 'border-[#d8ceff] bg-[#f0ecff] text-[#7956f5]',
   };
   const bgClass = themeMap[colorTheme] || themeMap.blue;
 
@@ -2020,7 +2058,7 @@ function StackedTag({
       onClick={onClick}
       className={`z-30 group flex items-center justify-center transition-all active:scale-95 ${positionClass}`}
     >
-      <div className={`px-2.5 py-0.5 rounded-full bg-gradient-to-br ${bgClass} text-white text-[9px] font-bold tracking-widest uppercase shadow-lg border border-white/20 hover:brightness-110`}>
+      <div className={`rounded-full border px-2.5 py-0.5 text-[9px] font-bold uppercase ${bgClass} shadow-[0_6px_14px_rgba(47,115,255,0.10)] hover:brightness-105`}>
         {text}
       </div>
     </button>
@@ -2040,16 +2078,16 @@ function TopologyEndpointNode({
 }) {
   const isClickable = typeof onClick === 'function';
   const themeClasses = accent === 'pink'
-    ? 'border-rose-200/50 bg-rose-50/40 text-rose-600 ring-rose-500/20'
-    : 'border-sky-200/50 bg-sky-50/40 text-sky-600 ring-sky-500/20';
+    ? 'text-[#7956f5] ring-[#7956f5]/20'
+    : 'text-[#2f73ff] ring-[#2f73ff]/20';
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`relative z-10 flex h-[70px] w-[60px] flex-col items-center justify-center rounded-2xl border backdrop-blur-md shadow-sm transition-all ${
+      className={`topology-node relative z-10 flex h-[70px] w-[60px] flex-col items-center justify-center rounded-2xl transition-all ${
         themeClasses
-      } ${active ? 'scale-110 ring-4 !border-rose-400 !bg-rose-100/60' : ''} ${isClickable ? 'hover:scale-105 hover:bg-white/80' : 'cursor-default'}`}
+      } ${active ? 'active-purple scale-110 ring-4' : ''} ${isClickable ? 'hover:scale-105 hover:bg-white/95' : 'cursor-default'}`}
     >
       <Database size={20} className="mb-1 opacity-80" />
       <span className="text-[14px] font-black tracking-tighter">{label}</span>
@@ -2071,8 +2109,8 @@ function TopologyAgentCard({
   const lines = label.split('-');
 
   return (
-    <div className={`relative z-10 flex h-[95px] w-[84px] flex-col items-center justify-center rounded-2xl border border-rose-200/50 bg-white/40 backdrop-blur-sm shadow-sm transition-all hover:-translate-y-1 ${active ? 'scale-110 ring-4 ring-rose-400/30 !border-rose-400 !bg-rose-50/80' : ''}`}>
-      <BrainCircuit size={18} className="mb-1.5 text-rose-500 opacity-70" />
+    <div className={`topology-node relative z-10 flex h-[95px] w-[84px] flex-col items-center justify-center rounded-2xl transition-all hover:-translate-y-1 ${active ? 'active-purple scale-110 ring-4 ring-[#7956f5]/20' : ''}`}>
+      <BrainCircuit size={18} className="mb-1.5 text-[#7956f5] opacity-80" />
       <div className="mb-1 text-center text-[11px] font-bold leading-tight text-slate-700">
         {lines.map((line, idx) => (
           <div key={idx}>{line}{idx === 0 && lines.length > 1 ? '-' : ''}</div>
@@ -2096,12 +2134,12 @@ function TopologyHostCard({
 }) {
   return (
     <div
-      className={`relative z-10 flex h-[65px] w-[74px] flex-col items-center justify-center rounded-xl border border-sky-200/50 bg-white/40 backdrop-blur-sm shadow-sm transition-all hover:shadow-md ${
-        active ? 'scale-110 ring-4 ring-sky-400/30 !border-sky-400 !bg-sky-50/80' : ''
+      className={`topology-node relative z-10 flex h-[65px] w-[74px] flex-col items-center justify-center rounded-xl transition-all hover:shadow-md ${
+        active ? 'active-blue scale-110 ring-4 ring-[#2f73ff]/20' : ''
       }`}
     >
       <StackedTag text={toolLabel} onClick={onToolsClick} positionClass="absolute -top-2" colorTheme="blue" />
-      <Server size={16} className="mb-1 text-sky-500 opacity-70" />
+      <Server size={16} className="mb-1 text-[#2f73ff] opacity-80" />
       <div className="text-[12px] font-bold tracking-tight text-slate-700">{label}</div>
     </div>
   );
