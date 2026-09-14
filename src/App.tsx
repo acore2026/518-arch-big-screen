@@ -1,11 +1,12 @@
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import {
   Activity, Server, Database, Network,
   Play, CheckCircle, Search, 
   SlidersHorizontal, ChevronRight, ChevronDown, 
   Loader2, Zap, BrainCircuit, Smartphone, ArrowRight,
   Library, FileJson, Bot, Radio, MapPin, Signal,
-  RotateCcw, HardDrive, X, Code, RefreshCw
+  RotateCcw, HardDrive, X, Code, RefreshCw,
+  Gauge, Timer, ShieldCheck, BarChart3, CircleDot, Star
 } from 'lucide-react';
 
 const DEFAULT_INTENT_TEXT = 'Deploy a massive IoT reachability tracking session for smart meters. Devices exhibit fixed-device characteristics.';
@@ -144,6 +145,103 @@ type MockUeOption = {
   data: UeSnapshot;
 };
 
+type PopoutInfo = {
+  title: string;
+  badge: string;
+  description: string;
+  meta: Array<{ label: string; value: string }>;
+  inputs: string[];
+  outputs: string[];
+};
+
+type HoverPopoutState = {
+  info: PopoutInfo;
+  x: number;
+  y: number;
+};
+
+type UeImpactMetric = {
+  label: string;
+  before: string;
+  after: string;
+  change: string;
+  direction: 'up' | 'down';
+  beforeBars: number[];
+  afterBars: number[];
+};
+
+type UeImpactRadarMetric = {
+  label: string;
+  before: number;
+  after: number;
+};
+
+const UE_IMPACT_METRICS: UeImpactMetric[] = [
+  {
+    label: 'Latency (ms)',
+    before: '32.1',
+    after: '8.6',
+    change: '70%',
+    direction: 'down',
+    beforeBars: [32, 44, 35, 48, 58, 49, 62, 44, 55, 66],
+    afterBars: [16, 19, 22, 24, 26, 28, 30, 33, 36, 38],
+  },
+  {
+    label: 'Reliability (%)',
+    before: '90.1',
+    after: '99.72',
+    change: '9.6pp',
+    direction: 'up',
+    beforeBars: [34, 31, 38, 42, 45, 39, 51, 47, 55, 52],
+    afterBars: [48, 54, 58, 62, 68, 72, 75, 79, 84, 88],
+  },
+  {
+    label: 'Throughput (Mbps)',
+    before: '78.4',
+    after: '286.2',
+    change: '265%',
+    direction: 'up',
+    beforeBars: [24, 28, 31, 27, 36, 33, 42, 40, 45, 48],
+    afterBars: [42, 46, 51, 55, 60, 64, 70, 76, 82, 89],
+  },
+  {
+    label: 'Packet Loss (%)',
+    before: '1.45',
+    after: '0.12',
+    change: '92%',
+    direction: 'down',
+    beforeBars: [52, 49, 55, 43, 62, 58, 47, 42, 38, 34],
+    afterBars: [26, 24, 22, 20, 18, 16, 15, 13, 12, 11],
+  },
+  {
+    label: 'BLER (%)',
+    before: '2.31',
+    after: '0.18',
+    change: '92%',
+    direction: 'down',
+    beforeBars: [56, 58, 61, 54, 49, 46, 43, 39, 35, 31],
+    afterBars: [30, 27, 25, 22, 20, 18, 17, 15, 13, 12],
+  },
+  {
+    label: 'QoS Stability',
+    before: '58/100',
+    after: '92/100',
+    change: '34pt',
+    direction: 'up',
+    beforeBars: [35, 39, 42, 36, 45, 48, 44, 50, 47, 54],
+    afterBars: [52, 56, 61, 65, 69, 73, 76, 81, 84, 88],
+  },
+];
+
+const UE_IMPACT_RADAR: UeImpactRadarMetric[] = [
+  { label: 'Latency', before: 38, after: 88 },
+  { label: 'Reliability', before: 42, after: 92 },
+  { label: 'Throughput', before: 44, after: 86 },
+  { label: 'QoS Stability', before: 47, after: 92 },
+  { label: 'Packet Loss', before: 35, after: 90 },
+  { label: 'BLER', before: 39, after: 87 },
+];
+
 const DEFAULT_UE_DATA: UeSnapshot = {
   supi: 'imsi-208930000000001',
   pei: 'imeisv-35431108221433-12',
@@ -228,6 +326,44 @@ const ARF_SKILLS = [
   'Policy Reasoning',
 ];
 
+const SKILL_DEFINITIONS: Record<string, { desc: string; inputs: string[]; outputs: string[]; role: string; criticality: string }> = {
+  'Intent Decomposition': {
+    desc: 'Transforms natural-language service requests into structured goals, constraints, KPI targets, and affected network context.',
+    inputs: ['User intent', 'Active UE profile', 'Slice and KPI context'],
+    outputs: ['Structured intent', 'Constraint set', 'Target KPI map'],
+    role: 'Planner',
+    criticality: 'High',
+  },
+  'Agent Selection': {
+    desc: 'Chooses the best specialist agents for the requested orchestration path based on required capabilities and network functions.',
+    inputs: ['Structured intent', 'Agent capability registry', 'Active NF state'],
+    outputs: ['Agent route', 'Task ownership map', 'Fallback agent list'],
+    role: 'Coordinator',
+    criticality: 'High',
+  },
+  'Execution Planning': {
+    desc: 'Builds the ordered action plan, dependencies, and tool-call sequence needed to apply the requested service change.',
+    inputs: ['Agent route', 'Tool registry', 'Policy constraints'],
+    outputs: ['Execution graph', 'Tool-call schedule', 'Rollback checkpoints'],
+    role: 'Planner',
+    criticality: 'High',
+  },
+  'Closed-Loop Verification': {
+    desc: 'Validates post-action telemetry against the original KPI targets and determines whether remediation is required.',
+    inputs: ['Execution result', 'Live metrics', 'Target thresholds'],
+    outputs: ['Verification verdict', 'Residual gap report', 'Remediation trigger'],
+    role: 'Verifier',
+    criticality: 'Medium',
+  },
+  'Policy Reasoning': {
+    desc: 'Checks authorization, QoS compatibility, and slice policy implications before an orchestration action is committed.',
+    inputs: ['Subscriber policy', 'Requested QoS profile', 'Slice policy rules'],
+    outputs: ['Policy decision', 'Allowed QoS envelope', 'Audit rationale'],
+    role: 'Policy',
+    criticality: 'High',
+  },
+};
+
 const safeRender = (val: any) => {
   if (val === null || val === undefined) return '';
   if (typeof val === 'object') return JSON.stringify(val);
@@ -236,6 +372,38 @@ const safeRender = (val: any) => {
 
 function getToolHostTag(tool: string) {
   return (TOOL_DEFINITIONS[tool]?.host || 'NF').replace(/^6G\s+/, '');
+}
+
+function getToolPopoutInfo(tool: string): PopoutInfo {
+  const definition = TOOL_DEFINITIONS[tool];
+
+  return {
+    title: tool,
+    badge: getToolHostTag(tool),
+    description: definition?.desc || 'No tool description configured.',
+    meta: [
+      { label: 'Host', value: definition?.host || 'Unknown' },
+      { label: 'Criticality', value: definition?.criticality || 'Unknown' },
+    ],
+    inputs: definition?.inputs || [],
+    outputs: definition?.outputs || [],
+  };
+}
+
+function getSkillPopoutInfo(skill: string): PopoutInfo {
+  const definition = SKILL_DEFINITIONS[skill];
+
+  return {
+    title: skill,
+    badge: 'ARF',
+    description: definition?.desc || 'No skill description configured.',
+    meta: [
+      { label: 'Role', value: definition?.role || 'Reasoning' },
+      { label: 'Criticality', value: definition?.criticality || 'Medium' },
+    ],
+    inputs: definition?.inputs || [],
+    outputs: definition?.outputs || [],
+  };
 }
 
 const UE_METRIC_LABELS = ['-30s', '-25s', '-20s', '-15s', '-10s', '-5s', 'Now'];
@@ -728,7 +896,7 @@ export default function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [selectedUeId, setSelectedUeId] = useState<string>(MOCK_UES[0].id);
   
-  const [selectedTool, setSelectedTool] = useState<string | null>(null);
+  const [hoverPopout, setHoverPopout] = useState<HoverPopoutState | null>(null);
   const [canvasOverlay, setCanvasOverlay] = useState<'trf' | 'arf' | null>(null);
   const playbackIdRef = useRef(0);
   const topologyViewportRef = useRef<HTMLDivElement | null>(null);
@@ -891,6 +1059,22 @@ export default function App() {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+  }
+
+  function showHoverPopout(info: PopoutInfo, event: MouseEvent<HTMLElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const estimatedHeight = info.inputs.length || info.outputs.length ? 238 : 168;
+    const viewportHeight = typeof window === 'undefined' ? 768 : window.innerHeight;
+
+    setHoverPopout({
+      info,
+      x: rect.right + 12,
+      y: clamp(rect.top - 10, 58, viewportHeight - estimatedHeight - 42),
+    });
+  }
+
+  function hideHoverPopout() {
+    setHoverPopout(null);
   }
 
   async function handleNgapRefresh() {
@@ -1124,55 +1308,8 @@ export default function App() {
     <div className="dashboard-root">
       <div className="dashboard-shell">
       
-      {/* TOOL DEFINITION MODAL OVERLAY */}
-      {selectedTool && (
-        <div className="modal-backdrop absolute inset-0 z-50 flex items-center justify-center animate-in fade-in duration-200">
-          <div className="modal-card flex w-[500px] flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="modal-header flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Code size={16} className="text-purple-600" />
-                <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-slate-800">Tool Definition Template</h3>
-              </div>
-              <button onClick={() => setSelectedTool(null)} className="text-slate-400 hover:text-slate-700 transition-colors">
-                <X size={18} />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-400 uppercase mb-1">Tool Name</h4>
-                  <p className="status-pill info font-mono">{selectedTool}</p>
-                </div>
-                <div className="text-right">
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1">Target Host NF</h4>
-                  <span className="status-pill success">
-                    {TOOL_DEFINITIONS[selectedTool]?.host || "Unknown"}
-                  </span>
-                </div>
-              </div>
-              <div>
-                <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><FileJson size={12}/> Description</h4>
-                <p className="metric-tile p-2 text-sm leading-relaxed text-slate-700">
-                  {TOOL_DEFINITIONS[selectedTool]?.desc || "No description available."}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><ArrowRight size={12}/> Input Parameters</h4>
-                  <ul className="list-disc pl-4 text-[11px] font-mono text-slate-600 space-y-1">
-                    {TOOL_DEFINITIONS[selectedTool]?.inputs?.map((inp: any, i: number) => <li key={i}>{safeRender(inp)}</li>)}
-                  </ul>
-                </div>
-                <div>
-                  <h4 className="text-[10px] font-bold text-slate-400 uppercase mb-1 flex items-center gap-1"><CheckCircle size={12}/> Expected Output</h4>
-                  <ul className="list-disc pl-4 text-[11px] font-mono text-emerald-700 space-y-1">
-                    {TOOL_DEFINITIONS[selectedTool]?.outputs?.map((out: any, i: number) => <li key={i}>{safeRender(out)}</li>)}
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {hoverPopout && (
+        <HoverInfoPopout info={hoverPopout.info} x={hoverPopout.x} y={hoverPopout.y} />
       )}
 
       {canvasOverlay === 'trf' && (
@@ -1199,10 +1336,9 @@ export default function App() {
                       <ToolBadge
                         key={tool}
                         label={tool}
-                        onClick={() => {
-                          setCanvasOverlay(null);
-                          setSelectedTool(tool);
-                        }}
+                        hoverInfo={getToolPopoutInfo(tool)}
+                        onHoverInfo={showHoverPopout}
+                        onHideHoverInfo={hideHoverPopout}
                       />
                     ))}
                   </div>
@@ -1240,14 +1376,13 @@ export default function App() {
       )}
 
       {/* HEADER */}
-      <header className="app-header px-5">
+      <header className="app-header px-4">
         <div className="brand-lockup">
           <div className="brand-mark flex items-center justify-center">
-            <Network size={24} />
+            <Network size={19} />
           </div>
           <div>
-            <div className="brand-title">Agentic Core</div>
-            <div className="brand-subtitle">Command Center</div>
+            <div className="brand-title">Agentic Core Control Portal</div>
           </div>
         </div>
         <div className="header-tools">
@@ -1256,8 +1391,8 @@ export default function App() {
             <div className="mt-0.5 text-[10px] font-medium text-slate-400">{currentDate}</div>
           </div>
           <HeaderUeSelector selectedUe={selectedUe} options={MOCK_UES} onSelect={handleSelectUe} />
-          <button className="header-icon-btn" type="button" aria-label="Search"><Search size={15} /></button>
-          <button className="header-icon-btn" type="button" aria-label="Settings"><SlidersHorizontal size={15} /></button>
+          <button className="header-icon-btn" type="button" aria-label="Search"><Search size={13} /></button>
+          <button className="header-icon-btn" type="button" aria-label="Settings"><SlidersHorizontal size={13} /></button>
         </div>
       </header>
 
@@ -1271,15 +1406,10 @@ export default function App() {
             <button className="rail-btn" type="button" aria-label="Infrastructure"><HardDrive size={17} /></button>
             <button className="rail-btn" type="button" aria-label="Settings"><SlidersHorizontal size={17} /></button>
           </div>
-          <button className="rail-btn" type="button" aria-label="Operator">OP</button>
         </div>
         
         {/* SIDEBAR */}
         <div className="sidebar-panel">
-          <div className="sidebar-section-header">
-            <span>Active Context</span>
-            <span className="status-pill success">Live</span>
-          </div>
           <div className="sidebar-card p-2">
             <div className="space-y-0.5">
               <TreeItem variant="explorer" id="explorer-ue" label="UE" icon={<Smartphone size={16} className="text-[#0f766e]" />} hasChildren isExpanded={expandedFolders.has('explorer-ue')} onToggle={toggleFolder} count={12} />
@@ -1316,7 +1446,17 @@ export default function App() {
               {expandedFolders.has('explorer-skills') && (
                 <div className="-mt-1 ml-2 border-l border-[#dbe3ef] pl-1.5">
                   {ARF_SKILLS.map((skill) => (
-                    <TreeItem key={skill} variant="explorer" label={skill} icon={<BrainCircuit size={14} className="text-[#5b21b6]" />} rightBadge="ARF" level={1} />
+                    <TreeItem
+                      key={skill}
+                      variant="explorer"
+                      label={skill}
+                      icon={<BrainCircuit size={14} className="text-[#5b21b6]" />}
+                      rightBadge="ARF"
+                      hoverInfo={getSkillPopoutInfo(skill)}
+                      onHoverInfo={showHoverPopout}
+                      onHideHoverInfo={hideHoverPopout}
+                      level={1}
+                    />
                   ))}
                 </div>
               )}
@@ -1331,7 +1471,9 @@ export default function App() {
                       label={tool}
                       icon={<Code size={14} className="text-[#0f172a]" />}
                       rightBadge={getToolHostTag(tool)}
-                      onClick={() => setSelectedTool(tool)}
+                      hoverInfo={getToolPopoutInfo(tool)}
+                      onHoverInfo={showHoverPopout}
+                      onHideHoverInfo={hideHoverPopout}
                       level={1}
                     />
                   ))}
@@ -1355,24 +1497,6 @@ export default function App() {
         {/* CENTER AREA */}
         <div className="workspace flex flex-col">
           
-          {/* TOPOLOGY VIEW */}
-          <div className="workspace-section flex h-[60%] flex-col overflow-hidden px-5 pt-4">
-            <div className="section-toolbar">
-              <div className="section-title">
-                <Activity size={15} className="text-[#2f73ff]" /> Active Network Architecture Topology
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="status-pill info">Active Trace</span>
-                <span className="status-pill success">Healthy</span>
-                <span className="topology-tools">
-                  <button type="button">Legend</button>
-                  <button type="button">Fit</button>
-                </span>
-              </div>
-            </div>
-            {topologyCanvas}
-          </div>
-
           {/* SBI TRACE LOG */}
           <div className="flex flex-1 flex-col overflow-hidden">
             <div className="trace-panel-header flex items-center justify-between px-5 py-2.5">
@@ -1417,21 +1541,20 @@ export default function App() {
               </table>
             </div>
           </div>
+
+          {/* TOPOLOGY VIEW */}
+          <div className="workspace-section topology-bottom flex h-[60%] flex-col overflow-hidden px-5 py-4">
+            {topologyCanvas}
+          </div>
         </div>
 
         {/* RIGHT PANEL */}
         <div className="right-panel flex flex-col">
-          <div className="right-panel-header">
-            <div>
-              <div className="text-[12px] font-extrabold text-slate-800">Outputs & Effects</div>
-              <div className="mt-0.5 text-[10px] font-medium text-slate-400">Live orchestration controls</div>
-            </div>
-            <span className="status-pill success">Live</span>
-          </div>
           <div className="right-tabs">
             <TabBtn active={rightTab === 'intent'} icon={<Zap size={14}/>} label="INTENT" onClick={() => setRightTab('intent')} />
             <TabBtn active={rightTab === 'log'} icon={<Activity size={14}/>} label="REACT LOG" onClick={() => setRightTab('log')} />
             <TabBtn active={rightTab === 'ue'} icon={<Smartphone size={14}/>} label="UE STATE" onClick={() => setRightTab('ue')} />
+            <TabBtn active={rightTab === 'ue-impact'} icon={<Gauge size={14}/>} label="UE IMPACT" onClick={() => setRightTab('ue-impact')} />
             <TabBtn active={rightTab === 'ngap'} icon={<Radio size={14}/>} label="NGAP" onClick={() => setRightTab('ngap')} />
             <TabBtn active={rightTab === 'infra'} icon={<HardDrive size={14}/>} label="INFRA" onClick={() => setRightTab('infra')} />
             <TabBtn active={rightTab === 'sessions'} icon={<Library size={14}/>} label="TRACE SESSIONS" onClick={() => setRightTab('sessions')} />
@@ -1530,6 +1653,10 @@ export default function App() {
                   </div>
                 )) : <div className="text-center py-10 text-slate-400 italic">No ReAct logs available.</div>}
               </div>
+            )}
+
+            {rightTab === 'ue-impact' && (
+              <UeImpactPanel />
             )}
 
             {rightTab === 'ue' && (
@@ -1824,6 +1951,225 @@ export default function App() {
   );
 }
 
+function UeImpactPanel() {
+  return (
+    <div className="ue-impact-panel">
+      <ImpactComparisonCard />
+      <ImpactScoreCard />
+    </div>
+  );
+}
+
+function ImpactComparisonCard() {
+  return (
+    <section className="impact-card impact-comparison-card">
+      <div className="impact-card-header">
+        <div><Activity size={13} /> UE Impact Comparison (Live)</div>
+        <span>Last 15 min</span>
+      </div>
+      <div className="impact-table-head">
+        <span>Metric</span>
+        <span>Before</span>
+        <span></span>
+        <span>After</span>
+        <span>Change</span>
+      </div>
+      <div className="impact-table-body">
+        {UE_IMPACT_METRICS.map((metric, index) => (
+          <ImpactMetricRow key={metric.label} metric={metric} index={index} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ImpactMetricRow({ metric, index }: { metric: UeImpactMetric; index: number }) {
+  const trendSymbol = metric.direction === 'up' ? '↑' : '↓';
+
+  return (
+    <div className="impact-metric-row">
+      <div className="impact-metric-name">
+        <span className="impact-metric-icon"><ImpactMetricIcon index={index} /></span>
+        <span>{metric.label}</span>
+      </div>
+      <div className="impact-value before">
+        <strong>{metric.before}</strong>
+        <MiniBarSparkline values={metric.beforeBars} tone="before" />
+      </div>
+      <ArrowRight size={13} className="impact-row-arrow" />
+      <div className="impact-value after">
+        <strong>{metric.after}</strong>
+        <MiniBarSparkline values={metric.afterBars} tone="after" />
+      </div>
+      <span className="impact-change">{trendSymbol} {metric.change}</span>
+    </div>
+  );
+}
+
+function ImpactMetricIcon({ index }: { index: number }) {
+  const icons = [Timer, ShieldCheck, BarChart3, CircleDot, Network, Star];
+  const Icon = icons[index] || Activity;
+  return <Icon size={13} />;
+}
+
+function MiniBarSparkline({ values, tone }: { values: number[]; tone: 'before' | 'after' }) {
+  const maxValue = Math.max(...values, 1);
+
+  return (
+    <div className={`impact-spark ${tone}`} aria-hidden="true">
+      {values.map((value, index) => (
+        <span
+          key={`${value}-${index}`}
+          style={{ height: `${Math.max(18, (value / maxValue) * 100)}%` }}
+        ></span>
+      ))}
+    </div>
+  );
+}
+
+function ImpactScoreCard() {
+  return (
+    <section className="impact-card impact-score-card">
+      <div className="impact-card-header">
+        <div><Gauge size={13} /> Overall Impact Score</div>
+        <span>Predicted</span>
+      </div>
+      <div className="impact-score-body">
+        <div>
+          <div className="impact-score-summary">
+            <ImpactGauge score={41} label="Before" tone="before" />
+            <div className="impact-score-gain">
+              <ArrowRight size={15} />
+              <strong>+51pt</strong>
+              <span>Improvement</span>
+            </div>
+            <ImpactGauge score={92} label="After" tone="after" />
+          </div>
+          <div className="impact-legend">
+            <span><i className="before"></i>Before</span>
+            <span><i className="after"></i>After</span>
+          </div>
+        </div>
+        <UeImpactRadarChart />
+      </div>
+    </section>
+  );
+}
+
+function ImpactGauge({ score, label, tone }: { score: number; label: string; tone: 'before' | 'after' }) {
+  const style = { '--score-angle': `${score * 3.6}deg` } as CSSProperties;
+
+  return (
+    <div className={`impact-gauge ${tone}`}>
+      <div className="impact-gauge-ring" style={style}>
+        <div className="impact-gauge-core">
+          <strong>{score}</strong>
+          <span>/100</span>
+        </div>
+      </div>
+      <div className="impact-gauge-label">{label}</div>
+    </div>
+  );
+}
+
+function UeImpactRadarChart() {
+  const size = 246;
+  const center = size / 2;
+  const radius = 78;
+  const labelRadius = 104;
+  const axisCount = UE_IMPACT_RADAR.length;
+  const ringValues = [0.25, 0.5, 0.75, 1];
+
+  const pointFor = (value: number, index: number, maxRadius = radius) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / axisCount;
+    const pointRadius = maxRadius * value;
+    return {
+      x: center + Math.cos(angle) * pointRadius,
+      y: center + Math.sin(angle) * pointRadius,
+    };
+  };
+
+  const polygonFor = (key: 'before' | 'after') => (
+    UE_IMPACT_RADAR
+      .map((metric, index) => {
+        const point = pointFor(metric[key] / 100, index);
+        return `${point.x},${point.y}`;
+      })
+      .join(' ')
+  );
+
+  return (
+    <div className="impact-radar">
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="UE impact radar chart">
+        {ringValues.map((ring) => (
+          <polygon
+            key={ring}
+            points={UE_IMPACT_RADAR.map((_, index) => {
+              const point = pointFor(ring, index);
+              return `${point.x},${point.y}`;
+            }).join(' ')}
+            className="impact-radar-ring"
+          />
+        ))}
+        {UE_IMPACT_RADAR.map((metric, index) => {
+          const axisEnd = pointFor(1, index);
+          const labelPoint = pointFor(1, index, labelRadius);
+          return (
+            <g key={`${metric.label}-${index}`}>
+              <line x1={center} y1={center} x2={axisEnd.x} y2={axisEnd.y} className="impact-radar-axis" />
+              <text x={labelPoint.x} y={labelPoint.y} textAnchor="middle" dominantBaseline="middle">{metric.label}</text>
+            </g>
+          );
+        })}
+        <polygon points={polygonFor('before')} className="impact-radar-before" />
+        <polygon points={polygonFor('after')} className="impact-radar-after" />
+        {UE_IMPACT_RADAR.map((metric, index) => {
+          const beforePoint = pointFor(metric.before / 100, index);
+          const afterPoint = pointFor(metric.after / 100, index);
+          return (
+            <g key={`${metric.label}-points-${index}`}>
+              <circle cx={beforePoint.x} cy={beforePoint.y} r="3" className="impact-radar-dot before" />
+              <circle cx={afterPoint.x} cy={afterPoint.y} r="3" className="impact-radar-dot after" />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+function HoverInfoPopout({ info, x, y }: { info: PopoutInfo; x: number; y: number }) {
+  return (
+    <div className="info-popout" style={{ left: x, top: y }}>
+      <div className="info-popout-head">
+        <div>
+          <div className="info-popout-title">{info.title}</div>
+          <div className="info-popout-desc">{info.description}</div>
+        </div>
+        <span>{info.badge}</span>
+      </div>
+      <div className="info-popout-meta">
+        {info.meta.map((item) => (
+          <div key={item.label}>
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </div>
+        ))}
+      </div>
+      <div className="info-popout-grid">
+        <div>
+          <h4>Inputs</h4>
+          {info.inputs.map((item) => <span key={item}>{item}</span>)}
+        </div>
+        <div>
+          <h4>Outputs</h4>
+          {info.outputs.map((item) => <span key={item}>{item}</span>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function HeaderUeSelector({
   selectedUe,
   options,
@@ -1973,15 +2319,25 @@ type TreeItemProps = {
   status?: 'healthy' | 'muted';
   variant?: 'legacy' | 'explorer';
   level?: number;
+  hoverInfo?: PopoutInfo;
+  onHoverInfo?: (info: PopoutInfo, event: MouseEvent<HTMLElement>) => void;
+  onHideHoverInfo?: () => void;
 };
 
-function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onToggle, id, count, rightBadge, status, variant = 'legacy' }: TreeItemProps) {
+function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onToggle, id, count, rightBadge, status, variant = 'legacy', hoverInfo, onHoverInfo, onHideHoverInfo }: TreeItemProps) {
   if (variant === 'explorer') {
     const statusClass = status === 'muted' ? 'bg-slate-300' : 'bg-[#22c55e]';
-    const isInteractive = Boolean(hasChildren || onClick);
+    const isInteractive = Boolean(hasChildren || onClick || hoverInfo);
+    const cursorClass = hasChildren || onClick ? 'cursor-pointer' : hoverInfo ? 'cursor-help' : 'cursor-default';
 
     return (
       <div
+        onMouseEnter={(event) => {
+          if (hoverInfo) onHoverInfo?.(hoverInfo, event);
+        }}
+        onMouseLeave={() => {
+          if (hoverInfo) onHideHoverInfo?.();
+        }}
         onClick={() => {
           if (hasChildren && onToggle && id) {
             onToggle(id);
@@ -1989,9 +2345,9 @@ function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onTog
           }
           onClick?.();
         }}
-        className={`tree-item group flex items-center gap-1.5 rounded-md px-1.5 text-[11px] transition-all ${
-          isInteractive ? 'cursor-pointer' : 'cursor-default'
-        } ${hasChildren ? 'h-8' : 'h-7'} ${active ? 'bg-[#eaf1ff] text-[#315ee8]' : 'text-[#31415f] hover:bg-[#f2f6fc]'}`}
+        className={`tree-item group flex items-center gap-2 rounded-md px-1.5 text-[13px] transition-all ${
+          isInteractive ? cursorClass : 'cursor-default'
+        } ${hasChildren ? 'h-9' : 'h-8'} ${active ? 'bg-[#eaf1ff] text-[#315ee8]' : 'text-[#31415f] hover:bg-[#f2f6fc]'}`}
       >
         <div className="flex w-3 shrink-0 justify-center text-[#0f2a44]">
           {hasChildren && (isExpanded ? <ChevronDown size={12}/> : <ChevronRight size={12}/>)}
@@ -2029,9 +2385,25 @@ function TreeItem({ icon, label, active, hasChildren, isExpanded, onClick, onTog
   );
 }
 
-function ToolBadge({ label, onClick }: any) {
+function ToolBadge({
+  label,
+  hoverInfo,
+  onHoverInfo,
+  onHideHoverInfo,
+}: {
+  label: string;
+  hoverInfo: PopoutInfo;
+  onHoverInfo: (info: PopoutInfo, event: MouseEvent<HTMLElement>) => void;
+  onHideHoverInfo: () => void;
+}) {
   return (
-    <span onClick={onClick} className="status-pill info cursor-pointer">{label}</span>
+    <span
+      onMouseEnter={(event) => onHoverInfo(hoverInfo, event)}
+      onMouseLeave={onHideHoverInfo}
+      className="status-pill info cursor-help"
+    >
+      {label}
+    </span>
   );
 }
 

@@ -10,7 +10,7 @@ export default defineConfig({
   ],
   server: {
     host: '0.0.0.0',
-    port: 7101,
+    port: 7150,
     strictPort: true,
     proxy: {
       '/dashscope': {
